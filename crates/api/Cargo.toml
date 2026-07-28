@@ -4,17 +4,24 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-forgebike-config = { workspace = true }
-forgebike-domain = { workspace = true }
+forgebike-config      = { workspace = true }
+forgebike-domain      = { workspace = true }
+forgebike-application = { workspace = true }
 
 axum           = { workspace = true }
+tower          = { workspace = true }
 tower-http     = { workspace = true }
+tower_governor = { workspace = true }
 sqlx           = { workspace = true }
 deadpool-redis = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true }
 tracing        = { workspace = true }
 thiserror      = { workspace = true }
+jsonwebtoken   = { workspace = true }
+validator      = { workspace = true }
+async-trait    = { workspace = true }
+uuid           = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
