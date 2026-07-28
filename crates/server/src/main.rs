@@ -1,18 +1,16 @@
-//! Binary entry point.
+//! Binary entry point — the composition root.
 //!
 //! Responsibilities (and nothing more):
 //!
-//! 1. Load the `.env` file (development only)
-//! 2. Load and validate the [`Config`]
-//! 3. Initialise the tracing subscriber
+//! 1. Load `.env`
+//! 2. Load [`Config`]
+//! 3. Initialise tracing
 //! 4. Connect to `PostgreSQL` and Redis
-//! 5. Run pending database migrations
-//! 6. Build the [`AppState`] and the axum [`Router`]
-//! 7. Bind the TCP listener and start serving
-//!
-//! Business logic, routing, and middleware all live in `forgebike-api`.
+//! 5. Run pending migrations
+//! 6. Wire up repositories → services → [`AppState`]
+//! 7. Build the router and serve
 
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use deadpool_redis::{Config as RedisPoolConfig, Runtime as RedisRuntime};
@@ -20,25 +18,27 @@ use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use forgebike_api::AppState;
+use forgebike_application::auth::AuthService;
 use forgebike_config::{Config, Environment};
+use forgebike_infrastructure::{
+    db::{PgTenantRepository, PgUserRepository},
+    redis::RedisTokenStore,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // -------------------------------------------------------------------------
-    // 1. Load .env (silently ignored in production where vars come from the
-    //    platform environment).
+    // 1. .env
     // -------------------------------------------------------------------------
     dotenvy::dotenv().ok();
 
     // -------------------------------------------------------------------------
-    // 2. Load configuration.
+    // 2. Config
     // -------------------------------------------------------------------------
     let config = Config::load().context("Failed to load configuration")?;
 
     // -------------------------------------------------------------------------
-    // 3. Initialise the tracing subscriber.
-    //    Development → human-readable pretty output
-    //    Production  → structured JSON (consumed by log-aggregation platforms)
+    // 3. Tracing
     // -------------------------------------------------------------------------
     init_tracing(&config);
 
@@ -48,8 +48,13 @@ async fn main() -> anyhow::Result<()> {
         "Starting Forgebike API server"
     );
 
+    // Warn loudly if the default JWT secret is in use.
+    if config.jwt.secret == "change-me-in-production-use-openssl-rand-hex-32" {
+        tracing::warn!("Using the default JWT secret — set APP__JWT__SECRET in production!");
+    }
+
     // -------------------------------------------------------------------------
-    // 4a. PostgreSQL connection pool.
+    // 4a. PostgreSQL
     // -------------------------------------------------------------------------
     let db = PgPoolOptions::new()
         .max_connections(config.database.max_connections)
@@ -60,8 +65,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("PostgreSQL pool established");
 
     // -------------------------------------------------------------------------
-    // 4b. Run pending migrations at startup so the schema is always up-to-date.
-    //     Migrations are embedded at compile-time from the workspace root.
+    // 4b. Migrations
     // -------------------------------------------------------------------------
     sqlx::migrate!("../../migrations")
         .run(&db)
@@ -71,30 +75,44 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Database migrations applied");
 
     // -------------------------------------------------------------------------
-    // 4c. Redis connection pool.
+    // 4c. Redis
     // -------------------------------------------------------------------------
     let redis = RedisPoolConfig::from_url(&config.redis.url)
         .create_pool(Some(RedisRuntime::Tokio1))
         .context("Failed to create Redis connection pool")?;
 
-    // Verify we can reach Redis immediately so a misconfiguration fails fast.
     redis.get().await.context("Failed to connect to Redis")?;
 
     tracing::info!("Redis pool established");
 
     // -------------------------------------------------------------------------
-    // 5. Assemble shared state and build the router.
+    // 5. Wire up infrastructure → application
+    // -------------------------------------------------------------------------
+    let user_repo = Arc::new(PgUserRepository::new(db.clone()));
+    let tenant_repo = Arc::new(PgTenantRepository::new(db.clone()));
+    let token_store = Arc::new(RedisTokenStore::new(redis.clone()));
+
+    let auth_service = Arc::new(AuthService::new(
+        user_repo,
+        tenant_repo,
+        token_store,
+        config.jwt.clone(),
+    ));
+
+    // -------------------------------------------------------------------------
+    // 6. AppState + router
     // -------------------------------------------------------------------------
     let state = AppState {
         db,
         redis,
         config: Arc::new(config.clone()),
+        auth_service,
     };
 
     let app = forgebike_api::router::build(state);
 
     // -------------------------------------------------------------------------
-    // 6. Bind and serve.
+    // 7. Serve
     // -------------------------------------------------------------------------
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -103,33 +121,38 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!(%addr, "Server listening");
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .context("Server error")?;
+    axum::serve(
+        listener,
+        // into_make_service_with_connect_info populates ConnectInfo<SocketAddr>
+        // in each request, which tower_governor needs to key rate limits by IP.
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .context("Server error")?;
 
     tracing::info!("Server shut down cleanly");
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Tracing initialisation
+// Tracing
 // ---------------------------------------------------------------------------
 
 fn init_tracing(config: &Config) {
-    let env_filter =
+    let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.app.log_level));
 
     match config.app.environment {
         Environment::Production => {
             tracing_subscriber::registry()
-                .with(env_filter)
+                .with(filter)
                 .with(fmt::layer().json())
                 .init();
         }
         Environment::Development => {
             tracing_subscriber::registry()
-                .with(env_filter)
+                .with(filter)
                 .with(fmt::layer().pretty())
                 .init();
         }
@@ -137,7 +160,7 @@ fn init_tracing(config: &Config) {
 }
 
 // ---------------------------------------------------------------------------
-// Graceful shutdown — handles both Ctrl-C and SIGTERM (Docker / Kubernetes).
+// Graceful shutdown
 // ---------------------------------------------------------------------------
 
 async fn shutdown_signal() {
