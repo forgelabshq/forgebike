@@ -4,7 +4,7 @@
 > marketing content generation, customer engagement, and business intelligence
 > — all delivered through a single multi-tenant API.
 
-[![CI](https://github.com/your-org/forgebike/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/forgebike/actions/workflows/ci.yml)
+[![CI](https://github.com/forgelabshq/forgebike/actions/workflows/ci.yml/badge.svg)](https://github.com/forgelabshq/forgebike/actions/workflows/ci.yml)
 ![Rust](https://img.shields.io/badge/rust-stable-orange)
 ![License](https://img.shields.io/badge/license-UNLICENSED-red)
 
@@ -199,7 +199,7 @@ phase is implemented.
 
 ## API Endpoints
 
-### Currently implemented (Phases 0–1)
+### Currently implemented (Phases 0–2)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -209,6 +209,15 @@ phase is implemented.
 | `POST` | `/api/v1/auth/refresh` | None | Rotate refresh token, return new pair |
 | `POST` | `/api/v1/auth/logout` | None | Revoke refresh token |
 | `GET` | `/api/v1/auth/me` | Bearer | Return authenticated user identity |
+| `POST` | `/api/v1/restaurants` | Bearer | Create a restaurant |
+| `GET` | `/api/v1/restaurants` | Bearer | List restaurants (cursor-paginated) |
+| `GET` | `/api/v1/restaurants/:id` | Bearer | Get a restaurant |
+| `PATCH` | `/api/v1/restaurants/:id` | Bearer | Partial update a restaurant |
+| `DELETE` | `/api/v1/restaurants/:id` | Bearer | Delete restaurant + all its menu items |
+| `POST` | `/api/v1/restaurants/:id/menu` | Bearer | Add a menu item |
+| `GET` | `/api/v1/restaurants/:id/menu` | Bearer | List menu items (cursor-paginated) |
+| `PATCH` | `/api/v1/restaurants/:id/menu/:item_id` | Bearer | Partial update a menu item |
+| `DELETE` | `/api/v1/restaurants/:id/menu/:item_id` | Bearer | Delete a menu item |
 
 ### Planned (see `documentation/architecture.md` for the full surface)
 
@@ -321,8 +330,8 @@ sqlx migrate info    # show status
 |---|---|---|
 | **0** | Project foundations, health endpoint, CI | ✅ Complete |
 | **1** | Auth & multi-tenancy (JWT, argon2id, refresh tokens) | ✅ Complete |
-| **2** | Restaurant & menu management | 🔲 Next |
-| **3** | Review aggregation (Google / Yelp / TripAdvisor) | 🔲 Planned |
+| **2** | Restaurant & menu management | ✅ Complete |
+| **3** | Review aggregation (Google / Yelp / TripAdvisor) | 🔲 Next |
 | **4** | AI sentiment analysis & reply drafts | 🔲 Planned |
 | **5** | AI marketing content generation (SSE streaming) | 🔲 Planned |
 | **6** | Business intelligence & analytics dashboards | 🔲 Planned |
@@ -341,3 +350,4 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 | [`documentation/architecture.md`](documentation/architecture.md) | Full platform design — stack choices, domain model, API surface, all phases |
 | [`documentation/phase-0-foundations.md`](documentation/phase-0-foundations.md) | Phase 0 deep-dive — setup guide, config reference, CI explanation |
 | [`documentation/phase-1-auth.md`](documentation/phase-1-auth.md) | Phase 1 deep-dive — token strategy, password hashing, rate limiting, API reference |
+| [`documentation/phase-2-restaurants.md`](documentation/phase-2-restaurants.md) | Phase 2 deep-dive — cursor pagination, PATCH pattern, tenant isolation, API reference |
