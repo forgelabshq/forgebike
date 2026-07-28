@@ -44,6 +44,21 @@ impl Cursor {
             id: Uuid::nil(),
         }
     }
+
+    /// Sentinel for the start of a **descending** list query
+    /// (`ORDER BY published_at DESC, id DESC`) used by the reviews endpoint.
+    ///
+    /// `(year_3000, max_uuid)` is greater than any real review row, so
+    /// `(published_at, id) < desc_start()` is always true on the first page.
+    #[must_use]
+    pub fn desc_start() -> Self {
+        Self {
+            // January 1, 3000 00:00:00 UTC — no review will ever be this new.
+            created_at: DateTime::<Utc>::from_timestamp(32_503_680_000, 0)
+                .expect("year 3000 is a valid timestamp"),
+            id: Uuid::from_bytes([0xff; 16]),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
