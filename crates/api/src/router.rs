@@ -19,6 +19,37 @@ use tracing::Level;
 
 use crate::{handlers, middleware::auth::require_auth, state::AppState};
 
+fn restaurant_routes(state: &AppState) -> Router<AppState> {
+    use axum::routing::patch;
+
+    Router::new()
+        // Restaurant CRUD
+        .route(
+            "/",
+            post(handlers::restaurants::create_restaurant)
+                .get(handlers::restaurants::list_restaurants),
+        )
+        .route(
+            "/:id",
+            get(handlers::restaurants::get_restaurant)
+                .patch(handlers::restaurants::update_restaurant)
+                .delete(handlers::restaurants::delete_restaurant),
+        )
+        // Menu items
+        .route(
+            "/:id/menu",
+            post(handlers::restaurants::create_menu_item)
+                .get(handlers::restaurants::list_menu_items),
+        )
+        .route(
+            "/:id/menu/:item_id",
+            patch(handlers::restaurants::update_menu_item)
+                .delete(handlers::restaurants::delete_menu_item),
+        )
+        // All restaurant routes require authentication.
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth))
+}
+
 pub fn build(state: AppState) -> Router {
     // -----------------------------------------------------------------------
     // Shared middleware layers
@@ -71,8 +102,7 @@ pub fn build(state: AppState) -> Router {
     Router::new()
         .route("/health", get(handlers::health::health))
         .nest("/api/v1/auth", auth_public.merge(auth_protected))
-        // Future feature routers mount here:
-        //   .nest("/api/v1/restaurants", restaurants::router(state.clone()))
+        .nest("/api/v1/restaurants", restaurant_routes(&state))
         .layer(trace_layer)
         .layer(CorsLayer::permissive())
         .with_state(state)
