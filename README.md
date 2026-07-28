@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/forgelabshq/forgebike/actions/workflows/ci.yml/badge.svg)](https://github.com/forgelabshq/forgebike/actions/workflows/ci.yml)
 ![Rust](https://img.shields.io/badge/rust-stable-orange)
-![License](https://img.shields.io/badge/license-UNLICENSED-red)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
