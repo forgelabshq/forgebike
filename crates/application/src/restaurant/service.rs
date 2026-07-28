@@ -684,7 +684,10 @@ mod tests {
 
         assert_eq!(updated.name, "Tagliatelle");
         assert_eq!(updated.price_cents, Some(1500), "price must be preserved");
-        assert_eq!(updated.is_available, false);
+        assert!(
+            !updated.is_available,
+            "is_available should be false after update"
+        );
     }
 
     #[tokio::test]
