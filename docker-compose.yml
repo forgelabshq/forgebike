@@ -1,0 +1,74 @@
+# ---------------------------------------------------------------------------
+# Local development stack.
+# Start with:  docker compose up -d
+# Stop with:   docker compose down
+# Wipe data:   docker compose down -v
+#
+# NOTE ON PORTS: The postgres services use host ports 5435/5436 intentionally
+# to avoid conflicting with a native PostgreSQL instance that may already be
+# running on 5432.  If you are using Docker exclusively (no native postgres),
+# you can remap these to 5432/5433 in a local .env override.
+# ---------------------------------------------------------------------------
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — development database
+  # Host port 5435 avoids conflicts with any native postgres on 5432.
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: forgebike
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — isolated test database
+  # --------------------------------------------------------------------------
+  postgres_test:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: forgebike_test
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # Redis 7
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  postgres_test_data:
+  redis_data:
