@@ -1,20 +1,20 @@
 //! Application configuration.
 //!
-//! Config is loaded in layers, with each subsequent layer overriding the previous:
+//! Config is loaded in layers, each layer overriding the previous:
 //!
-//! 1. `config/default.toml`  — committed baseline values (no secrets)
-//! 2. `config/{APP_ENV}.toml` — optional environment-specific overrides
-//! 3. Environment variables   — `APP__` prefix, `__` separator
+//! 1. `config/default.toml`        — committed baseline (no secrets)
+//! 2. `config/{APP_ENV}.toml`      — optional per-environment overrides
+//! 3. `APP__*` environment variables — `__` separator maps to nested keys
 //!    e.g. `APP__DATABASE__URL` → `database.url`
 //!
-//! In addition, the bare `DATABASE_URL` environment variable is accepted as an
-//! alias for `APP__DATABASE__URL` to stay compatible with common tooling (sqlx
-//! CLI, Railway, Fly.io, etc.).
+//! `DATABASE_URL` (bare, without prefix) is also accepted and re-mapped
+//! into the `APP__DATABASE__URL` slot before the loader runs, keeping us
+//! compatible with Heroku/Railway/Fly.io and the `sqlx` CLI.
 
 use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
-// Top-level config
+// Top-level
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize, Clone)]
@@ -23,6 +23,8 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub app: AppConfig,
+    pub jwt: JwtConfig,
+    pub rate_limit: RateLimitConfig,
 }
 
 // ---------------------------------------------------------------------------
@@ -52,6 +54,29 @@ pub struct AppConfig {
     pub log_level: String,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct RateLimitConfig {
+    /// Burst capacity — number of requests allowed in an instant before
+    /// throttling kicks in. Raise this in development/testing.
+    pub burst_size: u32,
+    /// Steady-state replenishment rate: tokens added per second.
+    pub per_second: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct JwtConfig {
+    /// HS256 signing secret — must be at least 32 characters in production.
+    /// Set via `APP__JWT__SECRET` environment variable; never commit the real
+    /// value.
+    pub secret: String,
+
+    /// Lifetime of an access token in seconds. Default: 900 (15 minutes).
+    pub access_token_expiry_secs: u64,
+
+    /// Lifetime of a refresh token in seconds. Default: 604800 (7 days).
+    pub refresh_token_expiry_secs: u64,
+}
+
 // ---------------------------------------------------------------------------
 // Environment enum
 // ---------------------------------------------------------------------------
@@ -66,49 +91,42 @@ pub enum Environment {
 impl std::fmt::Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Environment::Development => write!(f, "development"),
-            Environment::Production => write!(f, "production"),
+            Self::Development => write!(f, "development"),
+            Self::Production => write!(f, "production"),
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Loading
+// Loader
 // ---------------------------------------------------------------------------
 
 impl Config {
-    /// Load the configuration from files and environment variables.
+    /// Load configuration from files and environment variables.
     ///
     /// # Errors
-    /// Returns a [`config::ConfigError`] if any required key is missing or a
-    /// value cannot be deserialised into the expected type.
+    /// Returns [`config::ConfigError`] if a required key is absent or a value
+    /// cannot be deserialised into the expected type.
     pub fn load() -> Result<Self, config::ConfigError> {
-        // Honour the bare `DATABASE_URL` convention before handing off to the
-        // layered loader.  We do this by mapping it into the `APP__` namespace
-        // so the rest of the loading logic stays uniform.
+        // Allow bare DATABASE_URL (set by most PaaS platforms and sqlx-cli)
+        // by mirroring it into the APP__ namespace before loading.
         if let Ok(url) = std::env::var("DATABASE_URL") {
-            // Only set if the app-namespaced override isn't already present.
             if std::env::var("APP__DATABASE__URL").is_err() {
-                // SAFETY: setting env vars in a single-threaded startup context.
                 std::env::set_var("APP__DATABASE__URL", url);
             }
         }
 
         let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".into());
 
-        let cfg = config::Config::builder()
-            // 1. Committed defaults (no secrets).
+        config::Config::builder()
             .add_source(config::File::with_name("config/default"))
-            // 2. Optional per-environment overrides.
             .add_source(config::File::with_name(&format!("config/{env}")).required(false))
-            // 3. Environment variable overrides — APP__SECTION__KEY=value.
             .add_source(
                 config::Environment::with_prefix("APP")
                     .separator("__")
                     .try_parsing(true),
             )
-            .build()?;
-
-        cfg.try_deserialize()
+            .build()?
+            .try_deserialize()
     }
 }
