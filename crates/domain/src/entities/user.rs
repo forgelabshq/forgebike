@@ -56,3 +56,33 @@ impl std::str::FromStr for UserRole {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn every_variant_round_trips_through_display_and_from_str() {
+        let variants = [UserRole::Owner, UserRole::Manager, UserRole::Viewer];
+        for role in variants {
+            let s = role.to_string();
+            let parsed = UserRole::from_str(&s).unwrap();
+            assert_eq!(role, parsed, "round-trip failed for {s:?}");
+        }
+    }
+
+    #[test]
+    fn display_produces_lowercase_strings() {
+        assert_eq!(UserRole::Owner.to_string(), "owner");
+        assert_eq!(UserRole::Manager.to_string(), "manager");
+        assert_eq!(UserRole::Viewer.to_string(), "viewer");
+    }
+
+    #[test]
+    fn from_str_rejects_unknown_and_empty_strings() {
+        assert!(UserRole::from_str("admin").is_err());
+        assert!(UserRole::from_str("OWNER").is_err()); // case-sensitive
+        assert!(UserRole::from_str("").is_err());
+    }
+}
