@@ -1,39 +1,30 @@
 name: CI
 
-# ---------------------------------------------------------------------------
-# Trigger on every push to every branch, and on pull requests targeting
-# main or develop.  This means you get feedback on feature branches without
-# waiting for a PR or merge.
-# ---------------------------------------------------------------------------
 on:
-  push: # all branches — no filter
+  push: # every branch
   pull_request:
     branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # We use only runtime sqlx functions (sqlx::query_as, sqlx::query), not the
+  # compile-time query! macros.  SQLX_OFFLINE=true therefore applies everywhere
+  # — the compiler never needs a live database connection.  The migration step
+  # and any future integration tests use the runtime DATABASE_URL directly.
+  SQLX_OFFLINE: "true"
 
-# Cancel any in-progress run for the same branch/PR the moment a newer
-# commit is pushed, saving Actions minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 1 — Format, lint, and type-check (fast, no database needed)
-  #
-  # SQLX_OFFLINE=true tells sqlx not to hit a live database when verifying
-  # compile-time queries.  We don't use sqlx query macros yet (only the
-  # runtime API), so this is a no-op today but keeps CI clean as the
-  # codebase grows.
+  # Job 1 — Format, lint, and type-check  (fast, no services needed)
   # ---------------------------------------------------------------------------
   check:
     name: Check & Lint
     runs-on: ubuntu-latest
-    env:
-      SQLX_OFFLINE: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -57,16 +48,10 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Job 2 — Compile the release binary
-  #
-  # Catches issues (e.g. LTO warnings, conditional compilation) that only
-  # surface in --release mode and aren't caught by `cargo check`.
-  # Runs in parallel with the test job.
   # ---------------------------------------------------------------------------
   build:
     name: Release Build
     runs-on: ubuntu-latest
-    env:
-      SQLX_OFFLINE: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -104,10 +89,10 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
 
       redis:
         image: redis:7-alpine
@@ -115,18 +100,23 @@ jobs:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 10s
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
 
     env:
-      SQLX_OFFLINE: "false"
       DATABASE_URL: postgres://postgres:password@localhost:5432/forgebike_test
       APP__REDIS__URL: redis://localhost:6379
       APP_ENV: development
-      # Use a generous rate-limit so the test suite never hits 429s.
+      # Raise rate-limit burst so the test suite never hits 429s.
       APP__RATE_LIMIT__BURST_SIZE: "200"
       APP__RATE_LIMIT__PER_SECOND: "100"
+      # Explicit psql credentials — prevents any postgres client from falling
+      # back to the OS user (root on GitHub Actions runners).
+      PGUSER: postgres
+      PGPASSWORD: password
+      PGHOST: localhost
+      PGPORT: "5432"
 
     steps:
       - uses: actions/checkout@v4
@@ -144,13 +134,13 @@ jobs:
         run: cargo install sqlx-cli --no-default-features --features rustls,postgres
 
       - name: Run database migrations
-        run: sqlx migrate run --database-url postgres://postgres:password@localhost:5432/forgebike_test
+        run: sqlx migrate run
 
       - name: Run tests
         run: cargo nextest run --all-features
 
   # ---------------------------------------------------------------------------
-  # Job 4 — Security audit (fast, runs in parallel)
+  # Job 4 — Security audit
   # ---------------------------------------------------------------------------
   audit:
     name: Security Audit
