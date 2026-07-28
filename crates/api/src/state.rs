@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use deadpool_redis::Pool as RedisPool;
-use forgebike_application::{auth::AuthService, restaurant::RestaurantService};
+use forgebike_application::{
+    auth::AuthService, restaurant::RestaurantService, review::ReviewService,
+};
 use forgebike_config::Config;
 use sqlx::PgPool;
 
@@ -25,4 +27,7 @@ pub struct AppState {
 
     /// Restaurant and menu-item use-case service.
     pub restaurant_service: Arc<RestaurantService>,
+
+    /// Review sync and listing use-case service.
+    pub review_service: Arc<ReviewService>,
 }
