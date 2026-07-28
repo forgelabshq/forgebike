@@ -3,14 +3,16 @@ name    = "forgebike-server"
 version.workspace = true
 edition.workspace = true
 
-# Produce a binary called `forgebike`.
 [[bin]]
 name = "forgebike"
 path = "src/main.rs"
 
 [dependencies]
-forgebike-config = { workspace = true }
-forgebike-api    = { workspace = true }
+forgebike-config         = { workspace = true }
+forgebike-api            = { workspace = true }
+forgebike-application    = { workspace = true }
+forgebike-infrastructure = { workspace = true }
+forgebike-domain         = { workspace = true }
 
 tokio              = { workspace = true }
 axum               = { workspace = true }
