@@ -1,17 +1,14 @@
-//! Domain layer — pure business logic.
+//! Domain layer — pure business logic with zero infrastructure dependencies.
 //!
-//! This crate has **no** knowledge of HTTP, databases, or any external
-//! service.  It contains only:
-//!
-//! - Entities and value objects
-//! - Newtype ID wrappers
-//! - Domain error types
-//! - Port traits (interfaces that infrastructure must implement)
-//!
-//! Every other crate may depend on this one; this crate must depend on none
-//! of the others.
+//! Contains:
+//! - **Entities** — rich types that carry business rules
+//! - **Identifiers** — newtype UUID wrappers that prevent ID mix-ups
+//! - **Ports** — `async_trait` traits that infrastructure must implement
+//! - **Errors** — the single `DomainError` type returned by every port
 
+pub mod entities;
 pub mod error;
 pub mod identifiers;
+pub mod ports;
 
 pub use error::DomainError;
