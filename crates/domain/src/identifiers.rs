@@ -103,3 +103,75 @@ uuid_id!(
     /// Identifies a customer engagement campaign.
     CampaignId
 );
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    // -- Construction & round-trips -------------------------------------------
+
+    #[test]
+    fn new_produces_unique_ids() {
+        let a = TenantId::new();
+        let b = TenantId::new();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn from_uuid_preserves_the_uuid() {
+        let raw = Uuid::new_v4();
+        let id = RestaurantId::from_uuid(raw);
+        assert_eq!(id.as_uuid(), raw);
+    }
+
+    #[test]
+    fn display_matches_hyphenated_uuid() {
+        let raw = Uuid::new_v4();
+        let id = UserId::from_uuid(raw);
+        assert_eq!(id.to_string(), raw.to_string());
+    }
+
+    #[test]
+    fn from_str_round_trips_through_display() {
+        let id: MenuItemId = MenuItemId::new();
+        let s = id.to_string();
+        let parsed = MenuItemId::from_str(&s).unwrap();
+        assert_eq!(id, parsed);
+    }
+
+    #[test]
+    fn from_str_rejects_non_uuid_strings() {
+        assert!(TenantId::from_str("not-a-uuid").is_err());
+        assert!(TenantId::from_str("").is_err());
+        assert!(TenantId::from_str("12345").is_err());
+    }
+
+    // -- Type-safety: different ID types must not compare equal ---------------
+
+    #[test]
+    fn same_uuid_in_different_types_is_not_comparable() {
+        // This is a compile-time guarantee rather than a runtime one, but we
+        // can verify the IDs wrap the same UUID without being equal to each
+        // other (they have different types so == isn't defined between them).
+        let raw = Uuid::new_v4();
+        let tenant_id = TenantId::from_uuid(raw);
+        let restaurant_id = RestaurantId::from_uuid(raw);
+        // Both wrap the same UUID...
+        assert_eq!(tenant_id.as_uuid(), restaurant_id.as_uuid());
+        // ...but they are distinct Rust types — the line below won't compile:
+        // assert_eq!(tenant_id, restaurant_id);  // <-- type error
+    }
+
+    // -- Default --------------------------------------------------------------
+
+    #[test]
+    fn default_produces_a_non_nil_id() {
+        let id = TenantId::default();
+        assert_ne!(id.as_uuid(), Uuid::nil());
+    }
+}
