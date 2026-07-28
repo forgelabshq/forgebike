@@ -33,6 +33,13 @@ log_level   = "info"
 burst_size = 5   # tokens available immediately
 per_second  = 1  # tokens added per second
 
+[external_apis]
+# Override via APP__EXTERNAL_APIS__GOOGLE_PLACES_API_KEY etc. in production.
+# Clients return an empty list when the key is blank — no error is raised.
+google_places_api_key = ""
+yelp_api_key          = ""
+tripadvisor_api_key   = ""
+
 [jwt]
 # IMPORTANT: override APP__JWT__SECRET with a strong secret in production.
 # Generate one with: openssl rand -hex 32
