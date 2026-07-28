@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Prevents sqlx compile-time query checks from requiring a live DB in the
+  # lint/check job.  The test job has real services and does not set this.
+  SQLX_OFFLINE: "true"
+
+# Cancel in-progress runs for the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Format, lint, and type-check (no database needed)
+  # ---------------------------------------------------------------------------
+  check:
+    name: Check & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry + build artefacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+      - name: cargo clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: cargo check
+        run: cargo check --all-targets --all-features
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — Run the full test suite with real PostgreSQL + Redis
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER:     postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB:       forgebike_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      SQLX_OFFLINE: "false"
+      DATABASE_URL: postgres://postgres:password@localhost:5432/forgebike_test
+      APP__REDIS__URL: redis://localhost:6379
+      APP_ENV: development
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry + build artefacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --no-default-features --features rustls,postgres
+
+      - name: Run database migrations
+        run: sqlx migrate run --database-url postgres://postgres:password@localhost:5432/forgebike_test
+
+      - name: Run tests
+        run: cargo nextest run --all-features
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — Security audit (runs in parallel with test job)
+  # ---------------------------------------------------------------------------
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit
