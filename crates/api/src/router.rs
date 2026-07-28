@@ -46,6 +46,9 @@ fn restaurant_routes(state: &AppState) -> Router<AppState> {
             patch(handlers::restaurants::update_menu_item)
                 .delete(handlers::restaurants::delete_menu_item),
         )
+        // Reviews
+        .route("/:id/reviews", get(handlers::reviews::list_reviews))
+        .route("/:id/reviews/sync", post(handlers::reviews::sync_reviews))
         // All restaurant routes require authentication.
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
 }
