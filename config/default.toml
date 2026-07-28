@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------
+# Default configuration — safe to commit (contains NO secrets).
+#
+# Override any value locally via a .env file or environment variables:
+#   APP__SECTION__KEY=value
+#
+# TWO COMMON SETUPS:
+#
+#   A) Native PostgreSQL already running on port 5432 (the default below):
+#      DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/forgebike
+#      Use 127.0.0.1 (TCP), NOT localhost (which triggers peer auth on Linux).
+#
+#   B) Docker-only (no native postgres) — docker-compose maps to port 5435:
+#      DATABASE_URL=postgres://postgres:password@127.0.0.1:5435/forgebike
+# ---------------------------------------------------------------------------
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[database]
+# Uses 127.0.0.1 (TCP) so md5 password auth is used on Linux.
+# Change port to 5435 if connecting to the Docker postgres service.
+url             = "postgres://postgres:password@127.0.0.1:5432/forgebike"
+max_connections = 10
+
+[redis]
+url = "redis://127.0.0.1:6379"
+
+[app]
+environment = "development"
+log_level   = "info"
