@@ -11,6 +11,7 @@ pub mod error;
 pub mod extractors;
 pub mod handlers;
 pub mod middleware;
+pub mod pagination;
 pub mod router;
 pub mod state;
 
