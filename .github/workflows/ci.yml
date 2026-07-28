@@ -1,30 +1,39 @@
 name: CI
 
+# ---------------------------------------------------------------------------
+# Trigger on every push to every branch, and on pull requests targeting
+# main or develop.  This means you get feedback on feature branches without
+# waiting for a PR or merge.
+# ---------------------------------------------------------------------------
 on:
-  push:
-    branches: [main, develop]
+  push: # all branches — no filter
   pull_request:
     branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Prevents sqlx compile-time query checks from requiring a live DB in the
-  # lint/check job.  The test job has real services and does not set this.
-  SQLX_OFFLINE: "true"
 
-# Cancel in-progress runs for the same branch/PR.
+# Cancel any in-progress run for the same branch/PR the moment a newer
+# commit is pushed, saving Actions minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 1 — Format, lint, and type-check (no database needed)
+  # Job 1 — Format, lint, and type-check (fast, no database needed)
+  #
+  # SQLX_OFFLINE=true tells sqlx not to hit a live database when verifying
+  # compile-time queries.  We don't use sqlx query macros yet (only the
+  # runtime API), so this is a no-op today but keeps CI clean as the
+  # codebase grows.
   # ---------------------------------------------------------------------------
   check:
     name: Check & Lint
     runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -40,14 +49,46 @@ jobs:
       - name: cargo fmt --check
         run: cargo fmt --all --check
 
-      - name: cargo clippy (deny warnings)
+      - name: cargo clippy (warnings are errors)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: cargo check
         run: cargo check --all-targets --all-features
 
   # ---------------------------------------------------------------------------
-  # Job 2 — Run the full test suite with real PostgreSQL + Redis
+  # Job 2 — Compile the release binary
+  #
+  # Catches issues (e.g. LTO warnings, conditional compilation) that only
+  # surface in --release mode and aren't caught by `cargo check`.
+  # Runs in parallel with the test job.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Release Build
+    runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry + build artefacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo build --release
+        run: cargo build --release --bin forgebike
+
+      - name: Upload binary artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forgebike-linux-x86_64
+          path: target/release/forgebike
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — Full test suite with real PostgreSQL + Redis
   # ---------------------------------------------------------------------------
   test:
     name: Tests
@@ -57,9 +98,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER:     postgres
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
-          POSTGRES_DB:       forgebike_test
+          POSTGRES_DB: forgebike_test
         ports:
           - 5432:5432
         options: >-
@@ -83,6 +124,9 @@ jobs:
       DATABASE_URL: postgres://postgres:password@localhost:5432/forgebike_test
       APP__REDIS__URL: redis://localhost:6379
       APP_ENV: development
+      # Use a generous rate-limit so the test suite never hits 429s.
+      APP__RATE_LIMIT__BURST_SIZE: "200"
+      APP__RATE_LIMIT__PER_SECOND: "100"
 
     steps:
       - uses: actions/checkout@v4
@@ -106,7 +150,7 @@ jobs:
         run: cargo nextest run --all-features
 
   # ---------------------------------------------------------------------------
-  # Job 3 — Security audit (runs in parallel with test job)
+  # Job 4 — Security audit (fast, runs in parallel)
   # ---------------------------------------------------------------------------
   audit:
     name: Security Audit
@@ -114,6 +158,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Cargo registry
+        uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
