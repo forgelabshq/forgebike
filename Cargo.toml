@@ -2,14 +2,13 @@
 members = [
     "crates/config",
     "crates/domain",
+    "crates/application",
+    "crates/infrastructure",
     "crates/api",
     "crates/server",
 ]
 resolver = "2"
 
-# ---------------------------------------------------------------------------
-# Shared package metadata — inherited by every workspace member.
-# ---------------------------------------------------------------------------
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
@@ -17,18 +16,20 @@ license = "UNLICENSED"
 authors = ["Forgebike Team"]
 
 # ---------------------------------------------------------------------------
-# Canonical dependency versions for the whole workspace.
-# Each crate opts in with `dependency.workspace = true`.
+# Canonical dependency versions — each crate opts in with `dep.workspace = true`.
 # ---------------------------------------------------------------------------
 [workspace.dependencies]
 
 # --- async runtime ----------------------------------------------------------
-tokio          = { version = "1",    features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 
 # --- web --------------------------------------------------------------------
-axum           = { version = "0.7",  features = ["macros", "ws"] }
-tower          = { version = "0.4",  features = ["full"] }
-tower-http     = { version = "0.5",  features = ["cors", "trace", "request-id", "timeout"] }
+axum       = { version = "0.7", features = ["macros", "ws"] }
+tower      = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "request-id", "timeout"] }
+
+# --- rate limiting ----------------------------------------------------------
+tower_governor = "0.4"
 
 # --- database ---------------------------------------------------------------
 sqlx = { version = "0.8", features = [
@@ -39,7 +40,7 @@ sqlx = { version = "0.8", features = [
     "migrate",
 ] }
 
-# --- cache / queues ---------------------------------------------------------
+# --- cache ------------------------------------------------------------------
 deadpool-redis = { version = "0.14", features = ["rt_tokio_1"] }
 
 # --- serialisation ----------------------------------------------------------
@@ -47,8 +48,12 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # --- configuration ----------------------------------------------------------
-config   = "0.14"
-dotenvy  = "0.15"
+config  = "0.14"
+dotenvy = "0.15"
+
+# --- auth -------------------------------------------------------------------
+jsonwebtoken = "9"
+argon2       = "0.5"
 
 # --- logging / tracing -------------------------------------------------------
 tracing            = "0.1"
@@ -61,27 +66,28 @@ anyhow    = "1"
 # --- validation -------------------------------------------------------------
 validator = { version = "0.18", features = ["derive"] }
 
+# --- async traits -----------------------------------------------------------
+async-trait = "0.1"
+
 # --- ids & time -------------------------------------------------------------
 uuid   = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # --- internal workspace crates ----------------------------------------------
-forgebike-config = { path = "crates/config" }
-forgebike-domain = { path = "crates/domain" }
-forgebike-api    = { path = "crates/api" }
+forgebike-config         = { path = "crates/config" }
+forgebike-domain         = { path = "crates/domain" }
+forgebike-application    = { path = "crates/application" }
+forgebike-infrastructure = { path = "crates/infrastructure" }
+forgebike-api            = { path = "crates/api" }
 
 # ---------------------------------------------------------------------------
-# Workspace-wide lint configuration.
-# ---------------------------------------------------------------------------
 [workspace.lints.rust]
-unsafe_code   = "forbid"
+unsafe_code    = "forbid"
 unused_imports = "warn"
 dead_code      = "warn"
 
 [workspace.lints.clippy]
-# Give pedantic lower priority so individual allow-rules below can override it.
 pedantic           = { level = "warn", priority = -1 }
-# These are overly noisy during early development; re-enable before v1.
 unwrap_used        = "allow"
 expect_used        = "allow"
 missing_errors_doc = "allow"
