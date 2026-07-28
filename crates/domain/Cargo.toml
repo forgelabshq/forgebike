@@ -1,0 +1,12 @@
+[package]
+name    = "forgebike-domain"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde     = { workspace = true }
+uuid      = { workspace = true }
+
+[lints]
+workspace = true
