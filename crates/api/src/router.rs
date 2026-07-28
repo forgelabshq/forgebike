@@ -1,26 +1,28 @@
-//! Assembles the top-level [`axum::Router`] with all middleware applied.
+//! Assembles the complete axum [`Router`].
 //!
-//! Every feature area will add its own sub-router here as new phases are
-//! implemented. Keep this file thin — it is a wiring manifest, not a place
-//! for business logic.
+//! This file is a *wiring manifest* — keep it thin.  No business logic,
+//! no SQL, no token parsing.
 
-use axum::{Router, routing::get};
+use std::sync::Arc;
+
+use axum::{
+    middleware,
+    routing::{get, post},
+    Router,
+};
+use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use tower_http::{
     cors::CorsLayer,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
 use tracing::Level;
 
-use crate::{handlers, state::AppState};
+use crate::{handlers, middleware::auth::require_auth, state::AppState};
 
-/// Build the complete axum application.
-///
-/// Layers are applied bottom-up: the innermost layer runs first on the
-/// request path and last on the response path.
 pub fn build(state: AppState) -> Router {
-    // ---------------------------------------------------------------------------
-    // Tracing layer — logs every request/response pair as a structured span.
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Shared middleware layers
+    // -----------------------------------------------------------------------
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(
             DefaultMakeSpan::new()
@@ -33,21 +35,45 @@ pub fn build(state: AppState) -> Router {
                 .include_headers(false),
         );
 
-    // ---------------------------------------------------------------------------
-    // CORS — permissive during development; tighten per-origin in production.
-    // ---------------------------------------------------------------------------
-    let cors_layer = CorsLayer::permissive();
+    // -----------------------------------------------------------------------
+    // Rate limiting — 5 req burst, 1 req/s steady state per IP.
+    // Applied only to auth routes to throttle brute-force attempts.
+    // -----------------------------------------------------------------------
+    let rl = &state.config.rate_limit;
+    let auth_governor = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(rl.per_second)
+            .burst_size(rl.burst_size)
+            .finish()
+            .unwrap(),
+    );
 
-    // ---------------------------------------------------------------------------
-    // Route tree
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Auth routes — rate-limited, no session required
+    // -----------------------------------------------------------------------
+    let auth_public = Router::new()
+        .route("/register", post(handlers::auth::register))
+        .route("/login", post(handlers::auth::login))
+        .route("/refresh", post(handlers::auth::refresh))
+        .route("/logout", post(handlers::auth::logout))
+        .layer(GovernorLayer {
+            config: auth_governor,
+        });
+
+    // Protected auth routes — session required
+    let auth_protected = Router::new()
+        .route("/me", get(handlers::auth::me))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
+    // -----------------------------------------------------------------------
+    // Full route tree
+    // -----------------------------------------------------------------------
     Router::new()
-        // Infrastructure / ops
         .route("/health", get(handlers::health::health))
-        // Future feature sub-routers mount here, e.g.:
-        //   .nest("/api/v1/auth",        auth::router())
-        //   .nest("/api/v1/restaurants", restaurants::router())
+        .nest("/api/v1/auth", auth_public.merge(auth_protected))
+        // Future feature routers mount here:
+        //   .nest("/api/v1/restaurants", restaurants::router(state.clone()))
         .layer(trace_layer)
-        .layer(cors_layer)
+        .layer(CorsLayer::permissive())
         .with_state(state)
 }
