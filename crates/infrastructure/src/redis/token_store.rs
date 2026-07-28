@@ -50,10 +50,7 @@ impl TryFrom<TokenValue> for StoredTokenData {
                 .tenant_id
                 .parse::<TenantId>()
                 .map_err(|_| DomainError::Internal("malformed tenant_id in token store".into()))?,
-            role: v
-                .role
-                .parse::<UserRole>()
-                .map_err(DomainError::Internal)?,
+            role: v.role.parse::<UserRole>().map_err(DomainError::Internal)?,
         })
     }
 }
@@ -67,7 +64,7 @@ pub struct RedisTokenStore {
 }
 
 impl RedisTokenStore {
-    #[must_use] 
+    #[must_use]
     pub fn new(pool: RedisPool) -> Self {
         Self { pool }
     }

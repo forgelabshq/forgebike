@@ -12,10 +12,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use forgebike_domain::{
-    DomainError,
     entities::user::{User, UserRole},
     identifiers::{TenantId, UserId},
     ports::user_repository::{NewUser, UserRepository},
+    DomainError,
 };
 
 // ---------------------------------------------------------------------------
@@ -24,13 +24,13 @@ use forgebike_domain::{
 
 #[derive(sqlx::FromRow)]
 struct UserRow {
-    id:            Uuid,
-    tenant_id:     Uuid,
-    email:         String,
+    id: Uuid,
+    tenant_id: Uuid,
+    email: String,
     password_hash: String,
-    role:          String,
-    created_at:    DateTime<Utc>,
-    updated_at:    DateTime<Utc>,
+    role: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 impl TryFrom<UserRow> for User {
@@ -43,13 +43,13 @@ impl TryFrom<UserRow> for User {
             .map_err(DomainError::Internal)?;
 
         Ok(User {
-            id:            UserId::from_uuid(row.id),
-            tenant_id:     TenantId::from_uuid(row.tenant_id),
-            email:         row.email,
+            id: UserId::from_uuid(row.id),
+            tenant_id: TenantId::from_uuid(row.tenant_id),
+            email: row.email,
             password_hash: row.password_hash,
             role,
-            created_at:    row.created_at,
-            updated_at:    row.updated_at,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         })
     }
 }
@@ -63,7 +63,7 @@ pub struct PgUserRepository {
 }
 
 impl PgUserRepository {
-    #[must_use] 
+    #[must_use]
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }

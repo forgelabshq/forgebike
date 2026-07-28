@@ -6,7 +6,7 @@
 //! - `200 OK`                  — all components healthy
 //! - `503 Service Unavailable` — one or more components degraded
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde_json::json;
 
 use crate::state::AppState;
@@ -52,5 +52,9 @@ pub async fn health(State(state): State<AppState>) -> impl IntoResponse {
 
 #[inline]
 fn component_status(ok: bool) -> &'static str {
-    if ok { "ok" } else { "error" }
+    if ok {
+        "ok"
+    } else {
+        "error"
+    }
 }
