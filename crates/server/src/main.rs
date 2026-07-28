@@ -18,11 +18,17 @@ use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use forgebike_api::AppState;
-use forgebike_application::{auth::AuthService, restaurant::RestaurantService};
+use forgebike_application::{
+    auth::AuthService, restaurant::RestaurantService, review::ReviewService,
+};
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
-    db::{PgMenuItemRepository, PgRestaurantRepository, PgTenantRepository, PgUserRepository},
+    db::{
+        PgMenuItemRepository, PgRestaurantRepository, PgReviewRepository, PgTenantRepository,
+        PgUserRepository,
+    },
     redis::RedisTokenStore,
+    review_clients::{GooglePlacesClient, TripAdvisorClient, YelpFusionClient},
 };
 
 #[tokio::main]
@@ -101,7 +107,25 @@ async fn main() -> anyhow::Result<()> {
 
     let restaurant_repo = Arc::new(PgRestaurantRepository::new(db.clone()));
     let menu_item_repo = Arc::new(PgMenuItemRepository::new(db.clone()));
-    let restaurant_service = Arc::new(RestaurantService::new(restaurant_repo, menu_item_repo));
+    let restaurant_service = Arc::new(RestaurantService::new(
+        Arc::clone(&restaurant_repo) as _,
+        Arc::clone(&menu_item_repo) as _,
+    ));
+
+    let review_repo = Arc::new(PgReviewRepository::new(db.clone()));
+    let review_service = Arc::new(ReviewService::new(
+        review_repo as _,
+        Arc::clone(&restaurant_repo) as _,
+        Arc::new(GooglePlacesClient::new(
+            &config.external_apis.google_places_api_key,
+        )) as _,
+        Arc::new(YelpFusionClient::new(&config.external_apis.yelp_api_key)) as _,
+        Arc::new(TripAdvisorClient::new(
+            &config.external_apis.tripadvisor_api_key,
+        )) as _,
+    ));
+
+    tracing::info!("Services wired");
 
     // -------------------------------------------------------------------------
     // 6. AppState + router
@@ -112,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
         config: Arc::new(config.clone()),
         auth_service,
         restaurant_service,
+        review_service,
     };
 
     let app = forgebike_api::router::build(state);
