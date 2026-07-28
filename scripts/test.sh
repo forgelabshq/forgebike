@@ -116,13 +116,15 @@ field() {
 }
 
 # has_field <json> <key>  →  "yes" | "no"
+# Checks that the key EXISTS in the JSON object, regardless of the value.
+# (Avoids false negatives for falsy values like 0, [], false, "".)
 has_field() {
     printf '%s' "$1" \
       | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
-    print('yes' if d.get('$2') else 'no')
+    print('yes' if '$2' in d else 'no')
 except Exception:
     print('no')
 " 2>/dev/null || echo "no"
@@ -639,6 +641,87 @@ test_phase_2() {
     assert_status "double delete → 404"                "404" "$(status "${R}")"
 }
 
+# ── Phase 3 tests ─────────────────────────────────────────────────────────────────
+test_phase_3() {
+    section "Phase 3 — Review Aggregation"
+
+    # Fresh account + restaurant for this phase.
+    local REG_R
+    REG_R=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Review Corp","email":"p3@test.dev","password":"password99"}')
+    local TOKEN; TOKEN=$(field "$(body "${REG_R}")" "['access_token']")
+
+    local REST_R
+    REST_R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Review Bistro"}')
+    local REST_ID; REST_ID=$(field "$(body "${REST_R}")" "['id']")
+
+    # ── Auth required ────────────────────────────────────────────────────
+    subsection "Review endpoints require auth"
+    local R
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews")
+    assert_status "GET /reviews without token → 401"  "401" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/sync")
+    assert_status "POST /reviews/sync without token → 401" "401" "$(status "${R}")"
+
+    # ── Sync with no platform IDs ────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/reviews/sync"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/sync" \
+        -H "Authorization: Bearer ${TOKEN}")
+    local RB; RB=$(body "${R}")
+    assert_status "sync with no platform IDs → 200"   "200" "$(status "${R}")"
+    assert_present "  response has reviews_synced"          "$(has_field "${RB}" "reviews_synced")"
+    assert_present "  response has platforms_checked"       "$(has_field "${RB}" "platforms_checked")"
+    assert_present "  response has warnings"                "$(has_field "${RB}" "warnings")"
+    assert_eq      "  reviews_synced is 0 (no platform IDs set)" \
+                   "0" "$(field "${RB}" "['reviews_synced']")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/reviews/sync" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "sync for unknown restaurant → 404"  "404" "$(status "${R}")"
+
+    # ── List reviews ───────────────────────────────────────────────────────
+    subsection "GET /api/v1/restaurants/:id/reviews"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "list reviews → 200"              "200" "$(status "${R}")"
+    assert_present "  items array present"                "$(has_field "${RB}" "items")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews?platform=google" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with platform filter → 200" "200" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews?min_rating=4" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with min_rating filter → 200" "200" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews?platform=badplatform" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with unknown platform → 422" "422" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/reviews" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list for unknown restaurant → 404" "404" "$(status "${R}")"
+
+    # ── Cross-tenant isolation ─────────────────────────────────────────────
+    subsection "Cross-tenant isolation for reviews"
+    local REG2
+    REG2=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Other Corp","email":"p3other@test.dev","password":"password99"}')
+    local TOKEN2; TOKEN2=$(field "$(body "${REG2}")" "['access_token']")
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot list reviews → 404" "404" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/sync" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot sync reviews → 404" "404" "$(status "${R}")"
+}
+
 # ── Entry point ──────────────────────────────────────────────────────────────────
 main() {
     echo ""
@@ -652,6 +735,7 @@ main() {
     test_phase_0
     test_phase_1
     test_phase_2
+    test_phase_3
     print_summary
 
     [ "${FAIL}" -gt 0 ] && exit 1 || exit 0
