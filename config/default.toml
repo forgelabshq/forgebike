@@ -1,16 +1,13 @@
 # ---------------------------------------------------------------------------
-# Default configuration — safe to commit (contains NO secrets).
+# Default configuration — committed, contains NO secrets.
 #
-# Override any value locally via a .env file or environment variables:
-#   APP__SECTION__KEY=value
+# Override via env vars (APP__SECTION__KEY=value) or a local
+# config/development.toml (gitignored).
 #
-# TWO COMMON SETUPS:
-#
-#   A) Native PostgreSQL already running on port 5432 (the default below):
+# TWO COMMON LOCAL SETUPS:
+#   A) Native Postgres on 5432 — use 127.0.0.1 to force TCP auth on Linux:
 #      DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/forgebike
-#      Use 127.0.0.1 (TCP), NOT localhost (which triggers peer auth on Linux).
-#
-#   B) Docker-only (no native postgres) — docker-compose maps to port 5435:
+#   B) Docker Compose Postgres — mapped to 5435:
 #      DATABASE_URL=postgres://postgres:password@127.0.0.1:5435/forgebike
 # ---------------------------------------------------------------------------
 
@@ -19,8 +16,6 @@ host = "0.0.0.0"
 port = 8080
 
 [database]
-# Uses 127.0.0.1 (TCP) so md5 password auth is used on Linux.
-# Change port to 5435 if connecting to the Docker postgres service.
 url             = "postgres://postgres:password@127.0.0.1:5432/forgebike"
 max_connections = 10
 
@@ -30,3 +25,18 @@ url = "redis://127.0.0.1:6379"
 [app]
 environment = "development"
 log_level   = "info"
+
+[rate_limit]
+# Auth route rate limiting (per client IP).
+# Raise burst_size in development / CI to avoid 429s during rapid test runs.
+# Tighten both values in production.
+burst_size = 5   # tokens available immediately
+per_second  = 1  # tokens added per second
+
+[jwt]
+# IMPORTANT: override APP__JWT__SECRET with a strong secret in production.
+# Generate one with: openssl rand -hex 32
+# This development default must never be used in production.
+secret                     = "change-me-in-production-use-openssl-rand-hex-32"
+access_token_expiry_secs   = 900      # 15 minutes
+refresh_token_expiry_secs  = 604800   # 7 days
