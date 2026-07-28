@@ -32,7 +32,7 @@ tower-http = { version = "0.5", features = ["cors", "trace", "request-id", "time
 tower_governor = "0.4"
 
 # --- database ---------------------------------------------------------------
-sqlx = { version = "0.8", features = [
+sqlx = { version = "0.9", features = [
     "runtime-tokio",
     "postgres",
     "uuid",
