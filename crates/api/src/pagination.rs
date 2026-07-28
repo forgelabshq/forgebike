@@ -79,3 +79,86 @@ impl<T: Serialize> PageResponse<T> {
         Self { items, next_cursor }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use forgebike_domain::pagination::Cursor;
+    use uuid::Uuid;
+
+    fn sample_cursor() -> Cursor {
+        Cursor {
+            created_at: Utc::now(),
+            id: Uuid::new_v4(),
+        }
+    }
+
+    // -- Encode / decode round-trip -------------------------------------------
+
+    #[test]
+    fn encode_then_decode_returns_same_cursor() {
+        let original = sample_cursor();
+        let encoded = encode_cursor(&original);
+        let decoded = decode_cursor(&encoded).expect("should decode successfully");
+
+        // Timestamps are stored as milliseconds, so microseconds are truncated.
+        assert_eq!(
+            original.created_at.timestamp_millis(),
+            decoded.created_at.timestamp_millis(),
+        );
+        assert_eq!(original.id, decoded.id);
+    }
+
+    #[test]
+    fn encoded_cursor_is_url_safe_no_padding() {
+        let encoded = encode_cursor(&sample_cursor());
+        assert!(!encoded.contains('+'), "must not contain '+'");
+        assert!(!encoded.contains('/'), "must not contain '/'");
+        assert!(!encoded.contains('='), "must not contain padding '='");
+    }
+
+    // -- Invalid cursor inputs -----------------------------------------------
+
+    #[test]
+    fn empty_string_returns_none() {
+        assert!(decode_cursor("").is_none());
+    }
+
+    #[test]
+    fn non_base64_string_returns_none() {
+        assert!(decode_cursor("not base64!!!").is_none());
+    }
+
+    #[test]
+    fn valid_base64_but_wrong_format_returns_none() {
+        // "hello" in base64 — decodes fine but has no ':' separator.
+        assert!(decode_cursor("aGVsbG8").is_none());
+    }
+
+    #[test]
+    fn cursor_with_invalid_uuid_returns_none() {
+        // timestamp OK, UUID is garbage
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+        let raw = "1700000000000:not-a-real-uuid";
+        let encoded = URL_SAFE_NO_PAD.encode(raw.as_bytes());
+        assert!(decode_cursor(&encoded).is_none());
+    }
+
+    // -- PageResponse --------------------------------------------------------
+
+    #[test]
+    fn page_response_new_stores_items_and_cursor() {
+        let items: Vec<u32> = vec![1, 2, 3];
+        let cursor = Some("abc".to_string());
+        let resp = PageResponse::new(items.clone(), cursor.clone());
+        assert_eq!(resp.items, items);
+        assert_eq!(resp.next_cursor, cursor);
+    }
+
+    #[test]
+    fn page_response_with_no_cursor() {
+        let resp = PageResponse::new(vec![42u32], None);
+        assert!(resp.next_cursor.is_none());
+    }
+}

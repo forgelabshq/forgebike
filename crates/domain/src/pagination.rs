@@ -81,3 +81,39 @@ pub struct Page<T> {
     /// back as the `cursor` query parameter to fetch the next page.
     pub next_cursor: Option<Cursor>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cursor_start_is_at_unix_epoch() {
+        let c = Cursor::start();
+        assert_eq!(
+            c.created_at.timestamp(),
+            0,
+            "start cursor should be at epoch"
+        );
+    }
+
+    #[test]
+    fn cursor_start_uses_nil_uuid() {
+        let c = Cursor::start();
+        assert_eq!(c.id, Uuid::nil());
+    }
+
+    #[test]
+    fn default_list_params_has_limit_20_and_no_cursor() {
+        let p = ListParams::default();
+        assert_eq!(p.limit, 20);
+        assert!(p.cursor.is_none());
+    }
+
+    #[test]
+    fn any_real_created_at_is_after_cursor_start() {
+        // This mirrors the SQL invariant: (created_at, id) > (epoch, nil).
+        let start = Cursor::start();
+        let now = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap();
+        assert!(now > start.created_at);
+    }
+}
