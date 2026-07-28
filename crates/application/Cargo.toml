@@ -1,0 +1,21 @@
+[package]
+name    = "forgebike-application"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+forgebike-domain = { workspace = true }
+forgebike-config = { workspace = true }
+
+jsonwebtoken = { workspace = true }
+argon2       = { workspace = true }
+uuid         = { workspace = true }
+chrono       = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+async-trait  = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+
+[lints]
+workspace = true
