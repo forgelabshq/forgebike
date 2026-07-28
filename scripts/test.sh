@@ -442,18 +442,216 @@ print_summary() {
     echo ""
 }
 
-# ── Entry point ────────────────────────────────────────────────────────────────
+# ── Phase 2 tests ──────────────────────────────────────────────────────────────────
+test_phase_2() {
+    section "Phase 2 — Restaurants & Menus"
+
+    # First we need a valid token; register a fresh account for this phase.
+    local REG_R
+    REG_R=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Phase2 Corp","email":"p2@test.dev","password":"password99"}')
+    local TOKEN
+    TOKEN=$(field "$(body "${REG_R}")" "['access_token']")
+
+    AUTH="-H \"Authorization: Bearer ${TOKEN}\""
+
+    # ── Unauthenticated access ────────────────────────────────────────────────────
+    subsection "GET /api/v1/restaurants — no auth"
+    local R
+    R=$(_GET "${BASE_URL}/api/v1/restaurants")
+    assert_status "no token → 401" "401" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -d '{"name":"Test"}')
+    assert_status "POST without token → 401" "401" "$(status "${R}")"
+
+    # ── Restaurant CRUD ───────────────────────────────────────────────────────────
+    subsection "POST /api/v1/restaurants — create"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{
+          "name": "The Golden Fork",
+          "description": "Fine dining in the city centre",
+          "cuisine_type": "Modern European",
+          "address": "1 Harbour Lane, London",
+          "phone": "+44 20 7946 0001"
+        }')
+    local RB; RB=$(body "${R}")
+    assert_status "create restaurant → 201"           "201"                     "$(status "${R}")"
+    assert_present "  id present"                                               "$(has_field "${RB}" "id")"
+    assert_eq      "  name correct"          "The Golden Fork"                  "$(field "${RB}" "['name']")"
+    assert_eq      "  cuisine_type correct"  "Modern European"                  "$(field "${RB}" "['cuisine_type']")"
+
+    local REST_ID; REST_ID=$(field "${RB}" "['id']")
+
+    subsection "POST /api/v1/restaurants — validation"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":""}')
+    assert_status "empty name → 422"  "422" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{}')
+    assert_status "missing name → 422" "422" "$(status "${R}")"
+
+    subsection "GET /api/v1/restaurants/:id — fetch"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "get by id → 200"           "200"             "$(status "${R}")"
+    assert_eq      "  id matches"              "${REST_ID}"     "$(field "${RB}" "['id']")"
+    assert_eq      "  name matches"            "The Golden Fork" "$(field "${RB}" "['name']")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "unknown id → 404" "404" "$(status "${R}")"
+
+    subsection "PATCH /api/v1/restaurants/:id — update"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}" \
+        -X PATCH \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"The Silver Spoon","cuisine_type":"Italian"}')
+    RB=$(body "${R}")
+    assert_status "update → 200"            "200"             "$(status "${R}")"
+    assert_eq      "  name updated"          "The Silver Spoon" "$(field "${RB}" "['name']")"
+    assert_eq      "  cuisine updated"       "Italian"          "$(field "${RB}" "['cuisine_type']")"
+    assert_eq      "  address preserved"     "1 Harbour Lane, London" "$(field "${RB}" "['address']")"
+
+    subsection "GET /api/v1/restaurants — list"
+    # Create a second restaurant for pagination testing.
+    _POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Cafe Bleu","cuisine_type":"French"}' > /dev/null
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "list → 200"               "200" "$(status "${R}")"
+    assert_present "  items array present"          "$(has_field "${RB}" "items")"
+
+    # List with limit=1 to force pagination.
+    R=$(_GET "${BASE_URL}/api/v1/restaurants?limit=1" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status  "list?limit=1 → 200"       "200" "$(status "${R}")"
+    assert_present "  next_cursor present"           "$(has_field "${RB}" "next_cursor")"
+
+    local CURSOR; CURSOR=$(field "${RB}" "['next_cursor']")
+    R=$(_GET "${BASE_URL}/api/v1/restaurants?limit=1&cursor=${CURSOR}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "list page 2 → 200"         "200" "$(status "${R}")"
+    assert_present "  second page has items"         "$(has_field "${RB}" "items")"
+
+    # ── Menu items ─────────────────────────────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/menu — create item"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{
+          "name": "Beef Bourguignon",
+          "description": "Classic French braise",
+          "price_cents": 2850,
+          "category": "Mains"
+        }')
+    RB=$(body "${R}")
+    assert_status "create item → 201"          "201"              "$(status "${R}")"
+    assert_eq      "  name correct"            "Beef Bourguignon" "$(field "${RB}" "['name']")"
+    assert_eq      "  price_cents correct"     "2850"             "$(field "${RB}" "['price_cents']")"
+    assert_eq      "  is_available default"    "True"             "$(field "${RB}" "['is_available']")"
+
+    local ITEM_ID; ITEM_ID=$(field "${RB}" "['id']")
+
+    subsection "POST /api/v1/restaurants/:id/menu — validation"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":""}')
+    assert_status "empty name → 422" "422" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Soup","price_cents":-1}')
+    assert_status "negative price → 422" "422" "$(status "${R}")"
+
+    subsection "GET /api/v1/restaurants/:id/menu — list"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "list menu → 200"         "200" "$(status "${R}")"
+    assert_present "  items array present"        "$(has_field "${RB}" "items")"
+
+    subsection "PATCH /api/v1/restaurants/:id/menu/:item_id — update"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu/${ITEM_ID}" \
+        -X PATCH \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Coq au Vin","price_cents":3100,"is_available":false}')
+    RB=$(body "${R}")
+    assert_status "update item → 200"        "200"         "$(status "${R}")"
+    assert_eq     "  name updated"           "Coq au Vin"  "$(field "${RB}" "['name']")"
+    assert_eq     "  price updated"          "3100"        "$(field "${RB}" "['price_cents']")"
+    assert_eq     "  availability updated"   "False"       "$(field "${RB}" "['is_available']")"
+
+    subsection "DELETE /api/v1/restaurants/:id/menu/:item_id — delete item"
+    R=$(curl -s --max-time 10 -w "\n%{http_code}" \
+        -X DELETE \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu/${ITEM_ID}")
+    assert_status "delete item → 204"        "204" "$(status "${R}")"
+
+    # Confirm the menu list no longer contains the item.
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "menu list still returns 200 after delete" "200" "$(status "${R}")"
+
+    # ── Cross-tenant isolation ──────────────────────────────────────────────
+    subsection "Cross-tenant isolation"
+    # Register a second tenant, try to access first tenant's restaurant.
+    local REG2
+    REG2=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Other Corp","email":"other@test.dev","password":"password99"}')
+    local TOKEN2; TOKEN2=$(field "$(body "${REG2}")" "['access_token']")
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "different tenant cannot see restaurant → 404" "404" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/menu" \
+        -H "Authorization: Bearer ${TOKEN2}" \
+        -d '{"name":"Stolen Item"}')
+    assert_status "different tenant cannot add menu item → 404" "404" "$(status "${R}")"
+
+    # ── Delete restaurant ─────────────────────────────────────────────────────
+    subsection "DELETE /api/v1/restaurants/:id"
+    R=$(curl -s --max-time 10 -w "\n%{http_code}" \
+        -X DELETE \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${BASE_URL}/api/v1/restaurants/${REST_ID}")
+    assert_status "delete restaurant → 204"           "204" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "get deleted restaurant → 404"       "404" "$(status "${R}")"
+
+    R=$(curl -s --max-time 10 -w "\n%{http_code}" \
+        -X DELETE \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${BASE_URL}/api/v1/restaurants/${REST_ID}")
+    assert_status "double delete → 404"                "404" "$(status "${R}")"
+}
+
+# ── Entry point ──────────────────────────────────────────────────────────────────
 main() {
     echo ""
-    echo -e "${BOLD}${BLUE}  ╔════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${BLUE}  ╔══════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}${BLUE}  ║         Forgebike Test Suite                   ║${NC}"
-    echo -e "${BOLD}${BLUE}  ╚════════════════════════════════════════════════╝${NC}"
+    echo -e "${BOLD}${BLUE}  ╚══════════════════════════════════════════════╝${NC}"
     echo -e "  ${DIM}$(date '+%Y-%m-%d %H:%M:%S')   BASE_URL=${BASE_URL}${NC}"
 
     start_infrastructure
     start_server
     test_phase_0
     test_phase_1
+    test_phase_2
     print_summary
 
     [ "${FAIL}" -gt 0 ] && exit 1 || exit 0
