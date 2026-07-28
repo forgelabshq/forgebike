@@ -199,11 +199,16 @@ phase is implemented.
 
 ## API Endpoints
 
-### Currently implemented (Phase 0)
+### Currently implemented (Phases 0–1)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` | None | Liveness probe — checks DB and Redis |
+| `POST` | `/api/v1/auth/register` | None | Create tenant + owner user, return token pair |
+| `POST` | `/api/v1/auth/login` | None | Verify credentials, return token pair |
+| `POST` | `/api/v1/auth/refresh` | None | Rotate refresh token, return new pair |
+| `POST` | `/api/v1/auth/logout` | None | Revoke refresh token |
+| `GET` | `/api/v1/auth/me` | Bearer | Return authenticated user identity |
 
 ### Planned (see `documentation/architecture.md` for the full surface)
 
@@ -315,8 +320,8 @@ sqlx migrate info    # show status
 | Phase | Feature area | Status |
 |---|---|---|
 | **0** | Project foundations, health endpoint, CI | ✅ Complete |
-| **1** | Auth & multi-tenancy (JWT, argon2id, refresh tokens) | 🔲 Next |
-| **2** | Restaurant & menu management | 🔲 Planned |
+| **1** | Auth & multi-tenancy (JWT, argon2id, refresh tokens) | ✅ Complete |
+| **2** | Restaurant & menu management | 🔲 Next |
 | **3** | Review aggregation (Google / Yelp / TripAdvisor) | 🔲 Planned |
 | **4** | AI sentiment analysis & reply drafts | 🔲 Planned |
 | **5** | AI marketing content generation (SSE streaming) | 🔲 Planned |
@@ -335,3 +340,4 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 |---|---|
 | [`documentation/architecture.md`](documentation/architecture.md) | Full platform design — stack choices, domain model, API surface, all phases |
 | [`documentation/phase-0-foundations.md`](documentation/phase-0-foundations.md) | Phase 0 deep-dive — setup guide, config reference, CI explanation |
+| [`documentation/phase-1-auth.md`](documentation/phase-1-auth.md) | Phase 1 deep-dive — token strategy, password hashing, rate limiting, API reference |
