@@ -25,6 +25,17 @@ pub struct Config {
     pub app: AppConfig,
     pub jwt: JwtConfig,
     pub rate_limit: RateLimitConfig,
+    pub external_apis: ExternalApisConfig,
+}
+
+/// API keys for external review platforms.
+/// All fields default to empty strings — the corresponding client skips
+/// fetching when its key is empty rather than returning an error.
+#[derive(Debug, Deserialize, Clone)]
+pub struct ExternalApisConfig {
+    pub google_places_api_key: String,
+    pub yelp_api_key: String,
+    pub tripadvisor_api_key: String,
 }
 
 // ---------------------------------------------------------------------------
