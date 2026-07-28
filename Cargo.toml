@@ -1,0 +1,88 @@
+[workspace]
+members = [
+    "crates/config",
+    "crates/domain",
+    "crates/api",
+    "crates/server",
+]
+resolver = "2"
+
+# ---------------------------------------------------------------------------
+# Shared package metadata — inherited by every workspace member.
+# ---------------------------------------------------------------------------
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+authors = ["Forgebike Team"]
+
+# ---------------------------------------------------------------------------
+# Canonical dependency versions for the whole workspace.
+# Each crate opts in with `dependency.workspace = true`.
+# ---------------------------------------------------------------------------
+[workspace.dependencies]
+
+# --- async runtime ----------------------------------------------------------
+tokio          = { version = "1",    features = ["full"] }
+
+# --- web --------------------------------------------------------------------
+axum           = { version = "0.7",  features = ["macros", "ws"] }
+tower          = { version = "0.4",  features = ["full"] }
+tower-http     = { version = "0.5",  features = ["cors", "trace", "request-id", "timeout"] }
+
+# --- database ---------------------------------------------------------------
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "postgres",
+    "uuid",
+    "chrono",
+    "migrate",
+] }
+
+# --- cache / queues ---------------------------------------------------------
+deadpool-redis = { version = "0.14", features = ["rt_tokio_1"] }
+
+# --- serialisation ----------------------------------------------------------
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# --- configuration ----------------------------------------------------------
+config   = "0.14"
+dotenvy  = "0.15"
+
+# --- logging / tracing -------------------------------------------------------
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# --- error handling ---------------------------------------------------------
+thiserror = "1"
+anyhow    = "1"
+
+# --- validation -------------------------------------------------------------
+validator = { version = "0.18", features = ["derive"] }
+
+# --- ids & time -------------------------------------------------------------
+uuid   = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# --- internal workspace crates ----------------------------------------------
+forgebike-config = { path = "crates/config" }
+forgebike-domain = { path = "crates/domain" }
+forgebike-api    = { path = "crates/api" }
+
+# ---------------------------------------------------------------------------
+# Workspace-wide lint configuration.
+# ---------------------------------------------------------------------------
+[workspace.lints.rust]
+unsafe_code   = "forbid"
+unused_imports = "warn"
+dead_code      = "warn"
+
+[workspace.lints.clippy]
+# Give pedantic lower priority so individual allow-rules below can override it.
+pedantic           = { level = "warn", priority = -1 }
+# These are overly noisy during early development; re-enable before v1.
+unwrap_used        = "allow"
+expect_used        = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
