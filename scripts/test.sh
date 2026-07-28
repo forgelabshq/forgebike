@@ -430,14 +430,14 @@ print_summary() {
     echo -e "${BOLD}${BLUE}┌──────────────────────────────────────────────────────┐${NC}"
     echo -e "${BOLD}${BLUE}│  Results                                             │${NC}"
     echo -e "${BOLD}${BLUE}├──────────────────────────────────────────────────────┤${NC}"
-    printf  "${BOLD}${BLUE}│${NC}  ${GREEN}%-6s passed${NC}  ${RED}%-6s failed${NC}  ${DIM}%-6s total${NC}          ${BOLD}${BLUE}│${NC}\n" \
+    printf  "${BOLD}${BLUE}│${NC}  ${GREEN}passed: %-4s${NC}  ${RED}failed: %-4s${NC}  ${DIM}total: %-4s${NC}        ${BOLD}${BLUE}│${NC}\n" \
             "${PASS}" "${FAIL}" "${total}"
     echo -e "${BOLD}${BLUE}└──────────────────────────────────────────────────────┘${NC}"
 
     if [ "${FAIL}" -eq 0 ]; then
-        echo -e "\n  ${GREEN}${BOLD}All ${total} tests passed ✓${NC}"
+        echo -e "\n  ${GREEN}${BOLD}All tests passed: ${total} ✓${NC}"
     else
-        echo -e "\n  ${RED}${BOLD}${FAIL} / ${total} tests failed ✗${NC}"
+        echo -e "\n  ${RED}${BOLD}Tests failed: ${FAIL} / ${total} ✗${NC}"
     fi
     echo ""
 }
