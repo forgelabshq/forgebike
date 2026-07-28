@@ -1,0 +1,25 @@
+[package]
+name    = "forgebike-server"
+version.workspace = true
+edition.workspace = true
+
+# Produce a binary called `forgebike`.
+[[bin]]
+name = "forgebike"
+path = "src/main.rs"
+
+[dependencies]
+forgebike-config = { workspace = true }
+forgebike-api    = { workspace = true }
+
+tokio              = { workspace = true }
+axum               = { workspace = true }
+sqlx               = { workspace = true }
+deadpool-redis     = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow             = { workspace = true }
+dotenvy            = { workspace = true }
+
+[lints]
+workspace = true
