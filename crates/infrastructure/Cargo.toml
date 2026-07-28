@@ -1,0 +1,24 @@
+[package]
+name    = "forgebike-infrastructure"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+forgebike-domain = { workspace = true }
+
+sqlx           = { workspace = true }
+deadpool-redis = { workspace = true }
+uuid           = { workspace = true }
+chrono         = { workspace = true }
+serde          = { workspace = true }
+serde_json     = { workspace = true }
+async-trait    = { workspace = true }
+thiserror      = { workspace = true }
+tracing        = { workspace = true }
+
+# Kept out of the workspace — only infrastructure hashes tokens, no other crate needs these.
+sha2 = "0.10"
+hex  = "0.4"
+
+[lints]
+workspace = true
