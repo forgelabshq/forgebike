@@ -18,10 +18,10 @@ use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use forgebike_api::AppState;
-use forgebike_application::auth::AuthService;
+use forgebike_application::{auth::AuthService, restaurant::RestaurantService};
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
-    db::{PgTenantRepository, PgUserRepository},
+    db::{PgMenuItemRepository, PgRestaurantRepository, PgTenantRepository, PgUserRepository},
     redis::RedisTokenStore,
 };
 
@@ -99,6 +99,10 @@ async fn main() -> anyhow::Result<()> {
         config.jwt.clone(),
     ));
 
+    let restaurant_repo = Arc::new(PgRestaurantRepository::new(db.clone()));
+    let menu_item_repo = Arc::new(PgMenuItemRepository::new(db.clone()));
+    let restaurant_service = Arc::new(RestaurantService::new(restaurant_repo, menu_item_repo));
+
     // -------------------------------------------------------------------------
     // 6. AppState + router
     // -------------------------------------------------------------------------
@@ -107,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
         redis,
         config: Arc::new(config.clone()),
         auth_service,
+        restaurant_service,
     };
 
     let app = forgebike_api::router::build(state);
