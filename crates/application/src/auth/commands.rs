@@ -34,6 +34,7 @@ pub struct LogoutCommand {
 // ---------------------------------------------------------------------------
 
 /// Returned after a successful register, login, or refresh.
+#[derive(Debug)]
 pub struct AuthTokenPair {
     pub access_token: String,
     pub refresh_token: String,
