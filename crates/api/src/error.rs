@@ -1,33 +1,24 @@
-//! API error type.
-//!
-//! [`ApiError`] implements [`axum::response::IntoResponse`] so that handlers
-//! can use `?` with `Result<_, ApiError>` — axum will automatically convert
-//! the error into the correct HTTP response.
-//!
-//! The conversion from [`DomainError`] ensures that internal details are
-//! never leaked to callers: the error message is logged at the appropriate
-//! level, and only a safe, generic message is returned in the JSON body.
+//! API error type — maps domain and application errors to HTTP responses.
 
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use forgebike_application::auth::error::AuthError;
 use forgebike_domain::DomainError;
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
-// Type alias — keeps handler signatures readable.
+// Type alias
 // ---------------------------------------------------------------------------
 
-/// Shorthand for handler return types: `ApiResult<Json<Foo>>`, etc.
 pub type ApiResult<T> = Result<T, ApiError>;
 
 // ---------------------------------------------------------------------------
 // ApiError
 // ---------------------------------------------------------------------------
 
-/// An error that can be returned from any HTTP handler.
 #[derive(Debug)]
 pub struct ApiError {
     status: StatusCode,
@@ -35,7 +26,6 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    /// Construct an error with an explicit status code and message.
     pub fn new(status: StatusCode, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -43,36 +33,35 @@ impl ApiError {
         }
     }
 
-    /// 500 Internal Server Error — details logged, generic message returned.
+    #[must_use]
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, message)
     }
 
-    /// 404 Not Found.
+    #[must_use]
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, message)
     }
 
-    /// 401 Unauthorised.
     #[must_use]
     pub fn unauthorised() -> Self {
         Self::new(StatusCode::UNAUTHORIZED, "Unauthorised")
     }
-}
 
-// ---------------------------------------------------------------------------
-// IntoResponse — the contract axum requires
-// ---------------------------------------------------------------------------
+    #[must_use]
+    pub fn unprocessable(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNPROCESSABLE_ENTITY, message)
+    }
+}
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let body = Json(json!({ "error": self.message }));
-        (self.status, body).into_response()
+        (self.status, Json(json!({ "error": self.message }))).into_response()
     }
 }
 
 // ---------------------------------------------------------------------------
-// Conversion from domain errors
+// Conversions
 // ---------------------------------------------------------------------------
 
 impl From<DomainError> for ApiError {
@@ -91,6 +80,17 @@ impl From<DomainError> for ApiError {
                 tracing::error!(%msg, "Internal error");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
             }
+        }
+    }
+}
+
+impl From<AuthError> for ApiError {
+    fn from(err: AuthError) -> Self {
+        match err {
+            AuthError::InvalidCredentials | AuthError::InvalidRefreshToken => {
+                Self::new(StatusCode::UNAUTHORIZED, err.to_string())
+            }
+            AuthError::Domain(domain_err) => Self::from(domain_err),
         }
     }
 }
