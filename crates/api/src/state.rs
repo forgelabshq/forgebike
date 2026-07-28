@@ -1,24 +1,28 @@
-//! Shared application state injected into every axum handler via
+//! Shared application state — injected into every axum handler via
 //! [`axum::extract::State`].
-//!
-//! [`AppState`] is intentionally `Clone` (all inner fields are either `Clone`
-//! or wrapped in `Arc`) so that axum can cheaply hand a copy to each handler
-//! future without any locking.
 
-use deadpool_redis::Pool as RedisPool;
-use forgebike_config::Config;
-use sqlx::PgPool;
 use std::sync::Arc;
 
-/// Shared state available to every HTTP handler.
+use deadpool_redis::Pool as RedisPool;
+use forgebike_application::auth::AuthService;
+use forgebike_config::Config;
+use sqlx::PgPool;
+
+/// Shared, cheaply-cloned state available to every HTTP handler.
+///
+/// All fields are either `Clone` themselves (`PgPool`, `RedisPool`) or wrapped
+/// in `Arc` so cloning is O(1).
 #[derive(Clone)]
 pub struct AppState {
     /// `PostgreSQL` connection pool.
     pub db: PgPool,
 
-    /// Redis connection pool (cache, rate-limit counters, job queues).
+    /// Redis connection pool.
     pub redis: RedisPool,
 
     /// Validated application configuration (read-only after startup).
     pub config: Arc<Config>,
+
+    /// Authentication use-case service.
+    pub auth_service: Arc<AuthService>,
 }
