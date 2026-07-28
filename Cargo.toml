@@ -64,7 +64,7 @@ thiserror = "1"
 anyhow    = "1"
 
 # --- validation -------------------------------------------------------------
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 
 # --- async traits -----------------------------------------------------------
 async-trait = "0.1"
