@@ -332,6 +332,55 @@ mod tests {
                 next_cursor: None,
             })
         }
+
+        async fn find_by_id(
+            &self,
+            tid: TenantId,
+            id: ReviewId,
+        ) -> Result<Option<Review>, DomainError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .find(|r| r.id == id && r.tenant_id == tid)
+                .cloned())
+        }
+
+        async fn list_pending_analysis(
+            &self,
+            tid: TenantId,
+            rid: RestaurantId,
+            limit: i64,
+        ) -> Result<Vec<Review>, DomainError> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| {
+                    r.tenant_id == tid && r.restaurant_id == rid && r.sentiment_score.is_none()
+                })
+                .take(usize::try_from(limit).unwrap_or(usize::MAX))
+                .cloned()
+                .collect())
+        }
+
+        async fn update_sentiment(&self, id: ReviewId, score: f32) -> Result<(), DomainError> {
+            let mut g = self.0.lock().unwrap();
+            if let Some(r) = g.iter_mut().find(|r| r.id == id) {
+                r.sentiment_score = Some(score);
+            }
+            Ok(())
+        }
+
+        async fn save_reply_draft(&self, id: ReviewId, draft: &str) -> Result<(), DomainError> {
+            let mut g = self.0.lock().unwrap();
+            if let Some(r) = g.iter_mut().find(|r| r.id == id) {
+                r.ai_reply_draft = Some(draft.to_string());
+            }
+            Ok(())
+        }
     }
 
     // -- Mock: fetch port ----------------------------------------------------
