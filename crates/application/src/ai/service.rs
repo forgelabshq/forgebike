@@ -476,6 +476,27 @@ mod tests {
                 tokens_used: 88,
             })
         }
+        async fn generate_content(
+            &self,
+            _ctx: &forgebike_domain::ports::ai_port::ContentContext,
+        ) -> Result<forgebike_domain::ports::ai_port::ContentDraft, DomainError> {
+            Ok(forgebike_domain::ports::ai_port::ContentDraft {
+                title: None,
+                body: "mock content".into(),
+                tokens_used: 10,
+            })
+        }
+        async fn stream_content(
+            &self,
+            _ctx: &forgebike_domain::ports::ai_port::ContentContext,
+            _on: std::sync::Arc<dyn Fn(String) + Send + Sync>,
+        ) -> Result<forgebike_domain::ports::ai_port::ContentDraft, DomainError> {
+            Ok(forgebike_domain::ports::ai_port::ContentDraft {
+                title: None,
+                body: "mock stream".into(),
+                tokens_used: 10,
+            })
+        }
     }
 
     // -- Mock: TokenUsageStore -----------------------------------------------
