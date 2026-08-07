@@ -19,20 +19,22 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 
 use forgebike_api::AppState;
 use forgebike_application::{
-    ai::AiService, auth::AuthService, restaurant::RestaurantService, review::ReviewService,
+    ai::AiService, auth::AuthService, content::ContentService, restaurant::RestaurantService,
+    review::ReviewService,
 };
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
     ai::OpenAiClient,
     db::{
-        PgMenuItemRepository, PgRestaurantRepository, PgReviewRepository, PgTenantRepository,
-        PgUserRepository,
+        PgContentRepository, PgMenuItemRepository, PgRestaurantRepository, PgReviewRepository,
+        PgTenantRepository, PgUserRepository,
     },
     redis::{RedisTokenStore, RedisTokenUsageStore},
     review_clients::{GooglePlacesClient, TripAdvisorClient, YelpFusionClient},
 };
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> anyhow::Result<()> {
     // -------------------------------------------------------------------------
     // 1. .env
@@ -132,13 +134,22 @@ async fn main() -> anyhow::Result<()> {
         &config.ai.model,
         config.ai.max_sentiment_tokens,
         config.ai.max_reply_tokens,
+        config.ai.max_content_tokens,
     ));
     let token_usage = Arc::new(RedisTokenUsageStore::new(redis.clone()));
     let ai_service = Arc::new(AiService::new(
         review_repo_for_ai as _,
         Arc::clone(&restaurant_repo) as _,
-        ai_client as _,
-        token_usage as _,
+        Arc::clone(&ai_client) as _,
+        Arc::clone(&token_usage) as _,
+    ));
+
+    let content_repo = Arc::new(PgContentRepository::new(db.clone()));
+    let content_service = Arc::new(ContentService::new(
+        content_repo as _,
+        Arc::clone(&restaurant_repo) as _,
+        Arc::clone(&ai_client) as _,
+        Arc::clone(&token_usage) as _,
     ));
 
     tracing::info!("Services wired");
@@ -154,6 +165,7 @@ async fn main() -> anyhow::Result<()> {
         restaurant_service,
         review_service,
         ai_service,
+        content_service,
     };
 
     let app = forgebike_api::router::build(state);
