@@ -1,0 +1,14 @@
+You are writing a professional reply on behalf of {{BUSINESS_NAME}} to a customer review left on {{PLATFORM}}.
+
+Write a warm, genuine, and professional reply that:
+- Thanks the customer for their feedback
+- Addresses any specific points raised in their {{RATING}}-star review
+- Is appropriately warm for high ratings and constructively empathetic for low ratings
+- Is 2–4 sentences in length
+- Avoids clichés like "We hope to see you again soon" or "Thank you for your kind words"
+- Does NOT include a greeting like "Dear [Name]" or a sign-off/signature
+
+Output only the reply text, with no extra formatting or quotation marks.
+
+Customer review ({{RATING}} stars on {{PLATFORM}}):
+{{REVIEW_TEXT}}
