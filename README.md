@@ -63,6 +63,7 @@ with a WebSocket endpoint for the live chat widget.
 |---|---|---|
 | HTTP client | `reqwest` 0.12 | Used by review platform clients; rustls-TLS, no OpenSSL dependency |
 | Cursor encoding | `base64` 0.22 | URL-safe base64 (no padding) for opaque pagination cursors |
+| AI | `async-openai` 0.28 | Typed async wrapper for OpenAI chat completions (sentiment + reply drafts) |
 
 ---
 
@@ -82,11 +83,12 @@ forgebike/
 │   ├── phase-0-foundations.md
 │   ├── phase-1-auth.md
 │   ├── phase-2-restaurants.md
-│   └── phase-3-reviews.md
+│   ├── phase-3-reviews.md
+│   └── phase-4-ai.md
 └── crates/
     ├── config/                  ← layered config loading + typed structs
     ├── domain/                  ← entities, ID types, port traits, pagination
-    ├── application/             ← use-case services (AuthService, RestaurantService, ReviewService)
+    ├── application/             ← use-case services (AuthService, RestaurantService, ReviewService, AiService)
     ├── infrastructure/          ← Postgres repos, Redis token store, external API clients
     ├── api/                     ← axum router, handlers, middleware, extractors
     └── server/                  ← binary entry point — wires everything together
@@ -363,8 +365,6 @@ The review list endpoint supports additional query parameters:
 ### Planned (see `documentation/architecture.md` for the full surface)
 
 ```
-POST   /api/v1/restaurants/:id/reviews/:rid/reply-draft
-
 POST   /api/v1/restaurants/:id/content/generate
 GET    /api/v1/restaurants/:id/content
 
@@ -386,10 +386,10 @@ cargo test --all-targets   # unit tests only (no server needed)
 cargo nextest run          # same but faster with nextest
 ```
 
-The unit test suite (55 tests) runs entirely in-memory with mock
+The unit test suite (63 tests) runs entirely in-memory with mock
 implementations of the port traits — no database or network required.
 
-The `scripts/test.sh` integration suite (101 assertions) starts the server,
+The `scripts/test.sh` integration suite (115 assertions) starts the server,
 runs curl-based tests against the live API, and leaves the server running for
 further development.
 
