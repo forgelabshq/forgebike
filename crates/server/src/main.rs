@@ -19,15 +19,16 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 
 use forgebike_api::AppState;
 use forgebike_application::{
-    auth::AuthService, restaurant::RestaurantService, review::ReviewService,
+    ai::AiService, auth::AuthService, restaurant::RestaurantService, review::ReviewService,
 };
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
+    ai::OpenAiClient,
     db::{
         PgMenuItemRepository, PgRestaurantRepository, PgReviewRepository, PgTenantRepository,
         PgUserRepository,
     },
-    redis::RedisTokenStore,
+    redis::{RedisTokenStore, RedisTokenUsageStore},
     review_clients::{GooglePlacesClient, TripAdvisorClient, YelpFusionClient},
 };
 
@@ -125,6 +126,21 @@ async fn main() -> anyhow::Result<()> {
         )) as _,
     ));
 
+    let review_repo_for_ai = Arc::new(PgReviewRepository::new(db.clone()));
+    let ai_client = Arc::new(OpenAiClient::new(
+        &config.ai.openai_api_key,
+        &config.ai.model,
+        config.ai.max_sentiment_tokens,
+        config.ai.max_reply_tokens,
+    ));
+    let token_usage = Arc::new(RedisTokenUsageStore::new(redis.clone()));
+    let ai_service = Arc::new(AiService::new(
+        review_repo_for_ai as _,
+        Arc::clone(&restaurant_repo) as _,
+        ai_client as _,
+        token_usage as _,
+    ));
+
     tracing::info!("Services wired");
 
     // -------------------------------------------------------------------------
@@ -137,6 +153,7 @@ async fn main() -> anyhow::Result<()> {
         auth_service,
         restaurant_service,
         review_service,
+        ai_service,
     };
 
     let app = forgebike_api::router::build(state);
