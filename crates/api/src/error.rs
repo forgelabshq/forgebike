@@ -6,8 +6,8 @@ use axum::{
     Json,
 };
 use forgebike_application::{
-    ai::error::AiError, auth::error::AuthError, restaurant::error::RestaurantError,
-    review::error::ReviewError,
+    ai::error::AiError, auth::error::AuthError, content::error::ContentError,
+    restaurant::error::RestaurantError, review::error::ReviewError,
 };
 use forgebike_domain::DomainError;
 use serde_json::json;
@@ -111,6 +111,23 @@ impl From<AiError> for ApiError {
             ),
             AiError::AiUnavailable => Self::new(StatusCode::SERVICE_UNAVAILABLE, err.to_string()),
             AiError::Domain(d) => Self::from(d),
+        }
+    }
+}
+
+impl From<ContentError> for ApiError {
+    fn from(err: ContentError) -> Self {
+        match err {
+            ContentError::RestaurantNotFound(id) => {
+                Self::not_found(format!("Restaurant {id} not found"))
+            }
+            ContentError::ContentNotFound(id) => {
+                Self::not_found(format!("Content piece {id} not found"))
+            }
+            ContentError::AiUnavailable => {
+                Self::new(StatusCode::SERVICE_UNAVAILABLE, err.to_string())
+            }
+            ContentError::Domain(d) => Self::from(d),
         }
     }
 }
