@@ -173,6 +173,83 @@ impl ReviewRepository for PgReviewRepository {
 
         build_page(rows, params.limit)
     }
+
+    async fn find_by_id(
+        &self,
+        tenant_id: TenantId,
+        id: ReviewId,
+    ) -> Result<Option<Review>, DomainError> {
+        let row = sqlx::query_as::<_, ReviewRow>(
+            r"
+            SELECT
+                id, restaurant_id, tenant_id,
+                platform::TEXT AS platform,
+                external_id, author_name, rating, body, published_at,
+                sentiment_score, ai_reply_draft, created_at, updated_at
+            FROM reviews
+            WHERE tenant_id = $1 AND id = $2
+            ",
+        )
+        .bind(tenant_id.as_uuid())
+        .bind(id.as_uuid())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+        row.map(Review::try_from).transpose()
+    }
+
+    async fn list_pending_analysis(
+        &self,
+        tenant_id: TenantId,
+        restaurant_id: RestaurantId,
+        limit: i64,
+    ) -> Result<Vec<Review>, DomainError> {
+        let rows = sqlx::query_as::<_, ReviewRow>(
+            r"
+            SELECT
+                id, restaurant_id, tenant_id,
+                platform::TEXT AS platform,
+                external_id, author_name, rating, body, published_at,
+                sentiment_score, ai_reply_draft, created_at, updated_at
+            FROM reviews
+            WHERE tenant_id     = $1
+              AND restaurant_id = $2
+              AND sentiment_score IS NULL
+              AND body            IS NOT NULL
+            ORDER BY published_at DESC
+            LIMIT $3
+            ",
+        )
+        .bind(tenant_id.as_uuid())
+        .bind(restaurant_id.as_uuid())
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+        rows.into_iter().map(Review::try_from).collect()
+    }
+
+    async fn update_sentiment(&self, id: ReviewId, score: f32) -> Result<(), DomainError> {
+        sqlx::query("UPDATE reviews SET sentiment_score = $2 WHERE id = $1")
+            .bind(id.as_uuid())
+            .bind(score)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Internal(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn save_reply_draft(&self, id: ReviewId, draft: &str) -> Result<(), DomainError> {
+        sqlx::query("UPDATE reviews SET ai_reply_draft = $2 WHERE id = $1")
+            .bind(id.as_uuid())
+            .bind(draft)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Internal(e.to_string()))?;
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
