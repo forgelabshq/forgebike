@@ -4,9 +4,14 @@
 //! `forgebike_infrastructure::ai::OpenAiClient`.  Tests use simple in-memory
 //! mocks.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 
-use crate::{entities::review::ReviewPlatform, DomainError};
+use crate::{
+    entities::{content_piece::ContentType, review::ReviewPlatform},
+    DomainError,
+};
 
 // ---------------------------------------------------------------------------
 // Value types
@@ -39,6 +44,33 @@ pub struct ReplyDraft {
 }
 
 // ---------------------------------------------------------------------------
+// Content generation types (Phase 5)
+// ---------------------------------------------------------------------------
+
+/// Context used to generate marketing content for a restaurant.
+#[derive(Debug, Clone)]
+pub struct ContentContext {
+    pub content_type: ContentType,
+    pub business_name: String,
+    /// e.g. `"Italian"` — included in the prompt when set.
+    pub cuisine_type: Option<String>,
+    /// e.g. `"summer menu launch"`, `"pasta carbonara"`, `"Mother's Day offer"`.
+    pub topic: Option<String>,
+    /// Optional tone / style guidance from the owner.
+    pub tone: Option<String>,
+}
+
+/// Output of a content-generation call (sync or streaming).
+#[derive(Debug, Clone)]
+pub struct ContentDraft {
+    /// Separate title when the content type calls for one (e.g. email subject).
+    pub title: Option<String>,
+    pub body: String,
+    /// `OpenAI` tokens consumed by this call.
+    pub tokens_used: u64,
+}
+
+// ---------------------------------------------------------------------------
 // Port
 // ---------------------------------------------------------------------------
 
@@ -56,4 +88,23 @@ pub trait AiContentPort: Send + Sync {
     /// or the `OpenAI` call fails.
     async fn generate_reply_draft(&self, context: &ReplyContext)
         -> Result<ReplyDraft, DomainError>;
+
+    /// Generate marketing content synchronously.
+    ///
+    /// Returns `Err(DomainError::ExternalService)` when the `API` key is empty.
+    async fn generate_content(&self, context: &ContentContext)
+        -> Result<ContentDraft, DomainError>;
+
+    /// Generate marketing content with **streaming** output.
+    ///
+    /// Each token chunk is forwarded to `on_chunk` as it arrives from the
+    /// `OpenAI` API.  The complete accumulated text is returned in
+    /// [`ContentDraft`] once the stream ends.
+    ///
+    /// Returns `Err(DomainError::ExternalService)` when the `API` key is empty.
+    async fn stream_content(
+        &self,
+        context: &ContentContext,
+        on_chunk: Arc<dyn Fn(String) + Send + Sync>,
+    ) -> Result<ContentDraft, DomainError>;
 }
