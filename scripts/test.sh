@@ -722,6 +722,88 @@ test_phase_3() {
     assert_status "other tenant cannot sync reviews → 404" "404" "$(status "${R}")"
 }
 
+# ── Phase 4 tests ─────────────────────────────────────────────────────────────────
+test_phase_4() {
+    section "Phase 4 — AI Sentiment & Reply Drafts"
+
+    # Fresh account + restaurant.
+    local REG_R
+    REG_R=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"AI Corp","email":"p4@test.dev","password":"password99"}')
+    local TOKEN; TOKEN=$(field "$(body "${REG_R}")" "['access_token']")
+
+    local REST_R
+    REST_R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"AI Bistro","cuisine_type":"Italian"}')
+    local REST_ID; REST_ID=$(field "$(body "${REST_R}")" "['id']")
+
+    # ── Auth required ────────────────────────────────────────────────────
+    subsection "AI endpoints require auth"
+    local R
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/analyse")
+    assert_status "POST /analyse without token → 401"    "401" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/ai/usage")
+    assert_status "GET /ai/usage without token → 401"     "401" "$(status "${R}")"
+
+    # ── Analyse with no AI key configured (returns 0, not error) ───────────
+    subsection "POST /api/v1/restaurants/:id/reviews/analyse"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/analyse" \
+        -H "Authorization: Bearer ${TOKEN}")
+    local RB; RB=$(body "${R}")
+    assert_status "analyse returns 200 (no AI key configured)" "200" "$(status "${R}")"
+    assert_present "  analysed field present"   "$(has_field "${RB}" "analysed")"
+    assert_present "  skipped field present"    "$(has_field "${RB}" "skipped")"
+    assert_present "  tokens_used field present" "$(has_field "${RB}" "tokens_used")"
+    assert_eq      "  analysed is 0 (no AI key)" "0" "$(field "${RB}" "['analysed']")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/reviews/analyse" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "analyse for unknown restaurant → 404" "404" "$(status "${R}")"
+
+    # ── GET single review ────────────────────────────────────────────────
+    # First sync reviews (no-op since no platform IDs) so we have the route
+    _POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/sync" \
+        -H "Authorization: Bearer ${TOKEN}" > /dev/null
+
+    subsection "GET /api/v1/restaurants/:id/reviews/:rid"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/00000000-0000-0000-0000-000000000000" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "GET unknown review → 404" "404" "$(status "${R}")"
+
+    # ── Reply draft (no AI key) ─────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/reviews/:rid/reply-draft"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/00000000-0000-0000-0000-000000000000/reply-draft" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "reply-draft for unknown review → 404" "404" "$(status "${R}")"
+
+    # ── Reply publish (501 stub) ───────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/reviews/:rid/reply-publish"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/00000000-0000-0000-0000-000000000000/reply-publish" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "reply-publish returns 501 Not Implemented" "501" "$(status "${R}")"
+
+    # ── Token usage ───────────────────────────────────────────────────
+    subsection "GET /api/v1/ai/usage"
+    R=$(_GET "${BASE_URL}/api/v1/ai/usage" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "GET /ai/usage → 200"                        "200" "$(status "${R}")"
+    assert_present "  monthly_tokens_used present"               "$(has_field "${RB}" "monthly_tokens_used")"
+
+    # ── Cross-tenant isolation ───────────────────────────────────────────
+    subsection "Cross-tenant isolation for AI endpoints"
+    local REG2
+    REG2=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Other AI","email":"p4other@test.dev","password":"password99"}')
+    local TOKEN2; TOKEN2=$(field "$(body "${REG2}")" "['access_token']")
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/reviews/analyse" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot analyse reviews → 404" "404" "$(status "${R}")"
+}
+
 # ── Entry point ──────────────────────────────────────────────────────────────────
 main() {
     echo ""
@@ -736,6 +818,7 @@ main() {
     test_phase_1
     test_phase_2
     test_phase_3
+    test_phase_4
     print_summary
 
     [ "${FAIL}" -gt 0 ] && exit 1 || exit 0

@@ -243,6 +243,10 @@ Heroku, and the `sqlx` CLI.
 | `APP__EXTERNAL_APIS__GOOGLE_PLACES_API_KEY` | `""` | Google Cloud Console → Places API |
 | `APP__EXTERNAL_APIS__YELP_API_KEY` | `""` | Yelp Fusion portal → Manage App |
 | `APP__EXTERNAL_APIS__TRIPADVISOR_API_KEY` | `""` | TripAdvisor Content API (partnership required) |
+| `APP__AI__OPENAI_API_KEY` | `""` | OpenAI API key — enables AI features when set |
+| `APP__AI__MODEL` | `gpt-4o-mini` | OpenAI chat completion model |
+| `APP__AI__MAX_SENTIMENT_TOKENS` | `60` | Token budget per sentiment analysis call |
+| `APP__AI__MAX_REPLY_TOKENS` | `300` | Token budget per reply draft call |
 
 External API keys default to empty strings. When empty, the corresponding
 review platform is silently skipped during sync — no error is raised.
@@ -297,7 +301,7 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 
 ## API Endpoints
 
-### Currently implemented (Phases 0–3)
+### Currently implemented (Phases 0–4)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -318,6 +322,11 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 | `DELETE` | `/api/v1/restaurants/:id/menu/:item_id` | Bearer | Delete a menu item |
 | `POST` | `/api/v1/restaurants/:id/reviews/sync` | Bearer | Sync reviews from Google / Yelp |
 | `GET` | `/api/v1/restaurants/:id/reviews` | Bearer | List reviews (newest-first, filterable) |
+| `GET` | `/api/v1/restaurants/:id/reviews/:rid` | Bearer | Get single review (includes AI fields) |
+| `POST` | `/api/v1/restaurants/:id/reviews/analyse` | Bearer | Run AI sentiment scoring on pending reviews |
+| `POST` | `/api/v1/restaurants/:id/reviews/:rid/reply-draft` | Bearer | Generate AI reply draft |
+| `POST` | `/api/v1/restaurants/:id/reviews/:rid/reply-publish` | Bearer | Publish reply to platform (501 stub) |
+| `GET` | `/api/v1/ai/usage` | Bearer | Monthly OpenAI token usage for the tenant |
 
 ### Cursor-based pagination
 
@@ -464,8 +473,8 @@ sqlx migrate info    # show status
 | **1** | Auth & multi-tenancy (JWT, argon2id, refresh tokens) | ✅ Complete |
 | **2** | Restaurant & menu management | ✅ Complete |
 | **3** | Review aggregation (Google / Yelp / TripAdvisor) | ✅ Complete |
-| **4** | AI sentiment analysis & reply drafts | 🔲 Next |
-| **5** | AI marketing content generation (SSE streaming) | 🔲 Planned |
+| **4** | AI sentiment analysis & reply drafts | ✅ Complete |
+| **5** | AI marketing content generation (SSE streaming) | 🔲 Next |
 | **6** | Business intelligence & analytics dashboards | 🔲 Planned |
 | **7** | Customer engagement — campaigns & AI chat widget | 🔲 Planned |
 | **8** | Stripe billing & subscription tier gating | 🔲 Planned |
@@ -484,3 +493,4 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 | [`documentation/phase-1-auth.md`](documentation/phase-1-auth.md) | Phase 1 — JWT strategy, Argon2id, token rotation, rate limiting |
 | [`documentation/phase-2-restaurants.md`](documentation/phase-2-restaurants.md) | Phase 2 — cursor pagination, PATCH pattern, tenant isolation |
 | [`documentation/phase-3-reviews.md`](documentation/phase-3-reviews.md) | Phase 3 — upsert deduplication, descending cursor, external API clients |
+| [`documentation/phase-4-ai.md`](documentation/phase-4-ai.md) | Phase 4 — OpenAI integration, prompt templates, token tracking, reply drafts |
