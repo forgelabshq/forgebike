@@ -26,6 +26,21 @@ pub struct Config {
     pub jwt: JwtConfig,
     pub rate_limit: RateLimitConfig,
     pub external_apis: ExternalApisConfig,
+    pub ai: AiConfig,
+}
+
+/// Configuration for the `OpenAI` integration.
+#[derive(Debug, Deserialize, Clone)]
+pub struct AiConfig {
+    /// `OpenAI` API key.  Set via `APP__AI__OPENAI_API_KEY`.
+    /// When empty the AI features are disabled gracefully.
+    pub openai_api_key: String,
+    /// Model to use for all AI calls.  Default: `gpt-4o-mini`.
+    pub model: String,
+    /// Maximum tokens for a sentiment analysis response.
+    pub max_sentiment_tokens: u32,
+    /// Maximum tokens for a reply draft response.
+    pub max_reply_tokens: u32,
 }
 
 /// API keys for external review platforms.
