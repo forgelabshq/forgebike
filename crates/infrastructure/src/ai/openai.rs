@@ -11,6 +11,8 @@
 //! - `generate_reply_draft` returns `Err(ExternalService)` — callers surface
 //!   a 503 to the user.
 
+use std::sync::Arc;
+
 use async_openai::{
     config::OpenAIConfig,
     types::{
@@ -20,9 +22,13 @@ use async_openai::{
     Client,
 };
 use async_trait::async_trait;
+use futures::StreamExt as _;
 
 use forgebike_domain::{
-    ports::ai_port::{AiContentPort, ReplyContext, ReplyDraft, SentimentResult},
+    entities::content_piece::ContentType,
+    ports::ai_port::{
+        AiContentPort, ContentContext, ContentDraft, ReplyContext, ReplyDraft, SentimentResult,
+    },
     DomainError,
 };
 
@@ -32,6 +38,7 @@ use forgebike_domain::{
 
 const SENTIMENT_PROMPT: &str = include_str!("prompts/sentiment.txt");
 const REPLY_PROMPT: &str = include_str!("prompts/reply.txt");
+const CONTENT_PROMPT: &str = include_str!("prompts/content.txt");
 
 // ---------------------------------------------------------------------------
 // Client
@@ -42,6 +49,7 @@ pub struct OpenAiClient {
     model: String,
     max_sentiment_tokens: u32,
     max_reply_tokens: u32,
+    max_content_tokens: u32,
 }
 
 impl OpenAiClient {
@@ -50,13 +58,57 @@ impl OpenAiClient {
         model: impl Into<String>,
         max_sentiment_tokens: u32,
         max_reply_tokens: u32,
+        max_content_tokens: u32,
     ) -> Self {
         Self {
             api_key: api_key.into(),
             model: model.into(),
             max_sentiment_tokens,
             max_reply_tokens,
+            max_content_tokens,
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Content prompt helpers
+    // -----------------------------------------------------------------------
+
+    fn build_content_prompt(ctx: &ContentContext) -> String {
+        let cuisine_desc = ctx
+            .cuisine_type
+            .as_deref()
+            .map(|c| format!(" {c}"))
+            .unwrap_or_default();
+
+        let type_instruction = match ctx.content_type {
+            ContentType::SocialPost =>
+                "Write a punchy social media post (max 240 characters) for Instagram, Facebook, or X. End with 2-3 relevant hashtags.",
+            ContentType::Email =>
+                "Write a marketing email. Line 1: the subject line. Blank line. Then the body (3 concise paragraphs).",
+            ContentType::MenuDescription =>
+                "Write an appetising 2-sentence menu item description (max 60 words) highlighting flavours and making the dish sound unmissable.",
+            ContentType::BlogIntro =>
+                "Write an engaging blog introduction (2 paragraphs, max 120 words) that hooks the reader and previews what the post will cover.",
+        };
+
+        let topic_line = ctx
+            .topic
+            .as_deref()
+            .map(|t| format!("Topic / focus: {t}\n"))
+            .unwrap_or_default();
+
+        let tone_line = ctx
+            .tone
+            .as_deref()
+            .map(|t| format!("Tone: {t}\n"))
+            .unwrap_or_default();
+
+        CONTENT_PROMPT
+            .replace("{{BUSINESS_NAME}}", &ctx.business_name)
+            .replace("{{CUISINE_DESC}}", &cuisine_desc)
+            .replace("{{CONTENT_TYPE_INSTRUCTION}}", type_instruction)
+            .replace("{{TOPIC_LINE}}", &topic_line)
+            .replace("{{TONE_LINE}}", &tone_line)
     }
 
     /// Build a configured `OpenAI` client from the stored API key.
@@ -172,6 +224,164 @@ impl AiContentPort for OpenAiClient {
         }
 
         Ok(ReplyDraft { text, tokens_used })
+    }
+
+    async fn generate_content(
+        &self,
+        context: &ContentContext,
+    ) -> Result<ContentDraft, DomainError> {
+        if self.api_key.is_empty() {
+            return Err(DomainError::ExternalService(
+                "OpenAI API key is not configured — set APP__AI__OPENAI_API_KEY".into(),
+            ));
+        }
+
+        let prompt = Self::build_content_prompt(context);
+
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(&self.model)
+            .max_tokens(self.max_content_tokens)
+            .messages([
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a skilled marketing copywriter specialising in the restaurant industry.")
+                    .build()
+                    .map_err(|e| DomainError::ExternalService(e.to_string()))?
+                    .into(),
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(prompt)
+                    .build()
+                    .map_err(|e| DomainError::ExternalService(e.to_string()))?
+                    .into(),
+            ])
+            .build()
+            .map_err(|e| DomainError::ExternalService(e.to_string()))?;
+
+        let response = self.client().chat().create(request).await.map_err(|e| {
+            DomainError::ExternalService(format!("OpenAI content call failed: {e}"))
+        })?;
+
+        let tokens_used = response.usage.map_or(0, |u| u64::from(u.total_tokens));
+        let raw = response
+            .choices
+            .into_iter()
+            .next()
+            .and_then(|c| c.message.content)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        if raw.is_empty() {
+            return Err(DomainError::ExternalService(
+                "OpenAI returned empty content".into(),
+            ));
+        }
+
+        Ok(split_title_body(&context.content_type, raw, tokens_used))
+    }
+
+    async fn stream_content(
+        &self,
+        context: &ContentContext,
+        on_chunk: Arc<dyn Fn(String) + Send + Sync>,
+    ) -> Result<ContentDraft, DomainError> {
+        if self.api_key.is_empty() {
+            return Err(DomainError::ExternalService(
+                "OpenAI API key is not configured — set APP__AI__OPENAI_API_KEY".into(),
+            ));
+        }
+
+        let prompt = Self::build_content_prompt(context);
+
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(&self.model)
+            .max_tokens(self.max_content_tokens)
+            .messages([
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content("You are a skilled marketing copywriter specialising in the restaurant industry.")
+                    .build()
+                    .map_err(|e| DomainError::ExternalService(e.to_string()))?
+                    .into(),
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(prompt)
+                    .build()
+                    .map_err(|e| DomainError::ExternalService(e.to_string()))?
+                    .into(),
+            ])
+            .build()
+            .map_err(|e| DomainError::ExternalService(e.to_string()))?;
+
+        let mut stream = self
+            .client()
+            .chat()
+            .create_stream(request)
+            .await
+            .map_err(|e| DomainError::ExternalService(format!("OpenAI stream failed: {e}")))?;
+
+        let mut full_text = String::new();
+        let mut tokens_used = 0u64;
+
+        while let Some(result) = stream.next().await {
+            match result {
+                Ok(response) => {
+                    for choice in response.choices {
+                        if let Some(delta) = choice.delta.content {
+                            full_text.push_str(&delta);
+                            on_chunk(delta);
+                        }
+                    }
+                    if let Some(usage) = response.usage {
+                        tokens_used = u64::from(usage.total_tokens);
+                    }
+                }
+                Err(e) => {
+                    return Err(DomainError::ExternalService(format!(
+                        "Stream chunk error: {e}"
+                    )));
+                }
+            }
+        }
+
+        let trimmed = full_text.trim().to_string();
+        if trimmed.is_empty() {
+            return Err(DomainError::ExternalService(
+                "OpenAI stream produced empty content".into(),
+            ));
+        }
+
+        Ok(split_title_body(
+            &context.content_type,
+            trimmed,
+            tokens_used,
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Content helper: split email subject / body
+// ---------------------------------------------------------------------------
+
+/// For `Email` content the model is instructed to put the subject on line 1.
+/// This helper splits it out; all other types return the raw text as the body.
+fn split_title_body(content_type: &ContentType, raw: String, tokens_used: u64) -> ContentDraft {
+    if *content_type == ContentType::Email {
+        let mut lines = raw.splitn(2, '\n');
+        let subject = lines.next().unwrap_or("").trim().to_string();
+        let body = lines.next().unwrap_or("").trim().to_string();
+        let (title, body) = if body.is_empty() {
+            (None, subject)
+        } else {
+            (Some(subject), body)
+        };
+        return ContentDraft {
+            title,
+            body,
+            tokens_used,
+        };
+    }
+    ContentDraft {
+        title: None,
+        body: raw,
+        tokens_used,
     }
 }
 
