@@ -79,6 +79,9 @@ base64 = "0.22"
 # --- http client (external review platform APIs) ----------------------------
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
+# --- AI (OpenAI) -------------------------------------------------------------
+async-openai = "0.28"
+
 # --- internal workspace crates ----------------------------------------------
 forgebike-config         = { path = "crates/config" }
 forgebike-domain         = { path = "crates/domain" }
