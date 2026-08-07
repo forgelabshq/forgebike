@@ -804,6 +804,106 @@ test_phase_4() {
     assert_status "other tenant cannot analyse reviews → 404" "404" "$(status "${R}")"
 }
 
+# ── Phase 5 tests ─────────────────────────────────────────────────────────────────
+test_phase_5() {
+    section "Phase 5 — AI Marketing Content Generation"
+
+    # Fresh account + restaurant.
+    local REG
+    REG=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Content Corp","email":"p5@test.dev","password":"password99"}')
+    local TOKEN; TOKEN=$(field "$(body "${REG}")" "['access_token']")
+
+    local REST_R
+    REST_R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Content Bistro","cuisine_type":"Italian"}')
+    local REST_ID; REST_ID=$(field "$(body "${REST_R}")" "['id']")
+
+    # ── Auth required ───────────────────────────────────────────────
+    subsection "Content endpoints require auth"
+    local R
+    R=$(_GET  "${BASE_URL}/api/v1/restaurants/${REST_ID}/content")
+    assert_status "GET /content without token → 401"       "401" "$(status "${R}")"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/generate" \
+        -d '{"content_type":"social_post"}')
+    assert_status "POST /content/generate without token → 401" "401" "$(status "${R}")"
+
+    # ── Generate (no AI key → 503) ───────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/content/generate"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/generate" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"content_type":"social_post","topic":"summer menu launch"}')
+    assert_status "generate with no AI key → 503"     "503" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/generate" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"content_type":"bad_type"}')
+    assert_status "generate with invalid content_type → 422" "422" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/content/generate" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"content_type":"email"}')
+    assert_status "generate for unknown restaurant → 404" "404" "$(status "${R}")"
+
+    # ── List content (empty) ─────────────────────────────────────────
+    subsection "GET /api/v1/restaurants/:id/content"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/content" \
+        -H "Authorization: Bearer ${TOKEN}")
+    local RB; RB=$(body "${R}")
+    assert_status "list content → 200"              "200" "$(status "${R}")"
+    assert_present "  items array present"                "$(has_field "${RB}" "items")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/content?status=draft" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with status filter → 200"   "200" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/content?content_type=social_post" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with type filter → 200"     "200" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/content?status=bad_status" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with invalid status → 422"  "422" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/content" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list for unknown restaurant → 404" "404" "$(status "${R}")"
+
+    # ── Get / update / delete non-existent piece ───────────────────────
+    subsection "Content piece CRUD on missing piece"
+    local FAKE_CID="00000000-0000-0000-0000-000000000000"
+    R=$(_GET  "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/${FAKE_CID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "get non-existent piece → 404"    "404" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/${FAKE_CID}" \
+        -X PATCH -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"status":"approved"}')
+    assert_status "patch non-existent piece → 404"   "404" "$(status "${R}")"
+
+    R=$(curl -s --max-time 10 -w "\n%{http_code}" -X DELETE \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/${FAKE_CID}")
+    assert_status "delete non-existent piece → 404"  "404" "$(status "${R}")"
+
+    # ── Cross-tenant isolation ─────────────────────────────────────────
+    subsection "Cross-tenant isolation for content"
+    local REG2
+    REG2=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Other Corp","email":"p5other@test.dev","password":"password99"}')
+    local TOKEN2; TOKEN2=$(field "$(body "${REG2}")" "['access_token']")
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/content" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot list content → 404" "404" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/content/generate" \
+        -H "Authorization: Bearer ${TOKEN2}" \
+        -d '{"content_type":"email"}')
+    assert_status "other tenant cannot generate content → 404" "404" "$(status "${R}")"
+}
+
 # ── Entry point ──────────────────────────────────────────────────────────────────
 main() {
     echo ""
@@ -819,6 +919,7 @@ main() {
     test_phase_2
     test_phase_3
     test_phase_4
+    test_phase_5
     print_summary
 
     [ "${FAIL}" -gt 0 ] && exit 1 || exit 0

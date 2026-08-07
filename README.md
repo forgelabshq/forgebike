@@ -63,7 +63,9 @@ with a WebSocket endpoint for the live chat widget.
 |---|---|---|
 | HTTP client | `reqwest` 0.12 | Used by review platform clients; rustls-TLS, no OpenSSL dependency |
 | Cursor encoding | `base64` 0.22 | URL-safe base64 (no padding) for opaque pagination cursors |
-| AI | `async-openai` 0.28 | Typed async wrapper for OpenAI chat completions (sentiment + reply drafts) |
+| AI | `async-openai` 0.28 | Typed async wrapper for OpenAI chat completions (sentiment, reply drafts, content) |
+| Async streams | `futures` 0.3 | `StreamExt` for iterating `OpenAI` streaming responses |
+| SSE streams | `tokio-stream` 0.1 | `UnboundedReceiverStream` converts mpsc channel to SSE stream |
 
 ---
 
@@ -88,7 +90,7 @@ forgebike/
 └── crates/
     ├── config/                  ← layered config loading + typed structs
     ├── domain/                  ← entities, ID types, port traits, pagination
-    ├── application/             ← use-case services (AuthService, RestaurantService, ReviewService, AiService)
+    ├── application/             ← use-case services (AuthService, RestaurantService, ReviewService, AiService, ContentService)
     ├── infrastructure/          ← Postgres repos, Redis token store, external API clients
     ├── api/                     ← axum router, handlers, middleware, extractors
     └── server/                  ← binary entry point — wires everything together
@@ -249,6 +251,7 @@ Heroku, and the `sqlx` CLI.
 | `APP__AI__MODEL` | `gpt-4o-mini` | OpenAI chat completion model |
 | `APP__AI__MAX_SENTIMENT_TOKENS` | `60` | Token budget per sentiment analysis call |
 | `APP__AI__MAX_REPLY_TOKENS` | `300` | Token budget per reply draft call |
+| `APP__AI__MAX_CONTENT_TOKENS` | `600` | Token budget per content generation call |
 
 External API keys default to empty strings. When empty, the corresponding
 review platform is silently skipped during sync — no error is raised.
@@ -303,7 +306,7 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 
 ## API Endpoints
 
-### Currently implemented (Phases 0–4)
+### Currently implemented (Phases 0–5)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -329,6 +332,12 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 | `POST` | `/api/v1/restaurants/:id/reviews/:rid/reply-draft` | Bearer | Generate AI reply draft |
 | `POST` | `/api/v1/restaurants/:id/reviews/:rid/reply-publish` | Bearer | Publish reply to platform (501 stub) |
 | `GET` | `/api/v1/ai/usage` | Bearer | Monthly OpenAI token usage for the tenant |
+| `POST` | `/api/v1/restaurants/:id/content/generate` | Bearer | Generate marketing content (social, email, menu, blog) |
+| `GET` | `/api/v1/restaurants/:id/content/stream` | Bearer | Stream content generation live via SSE |
+| `GET` | `/api/v1/restaurants/:id/content` | Bearer | List content pieces (filterable by status/type) |
+| `GET` | `/api/v1/restaurants/:id/content/:cid` | Bearer | Get a content piece |
+| `PATCH` | `/api/v1/restaurants/:id/content/:cid` | Bearer | Edit copy or approve/publish a piece |
+| `DELETE` | `/api/v1/restaurants/:id/content/:cid` | Bearer | Delete a content piece |
 
 ### Cursor-based pagination
 
@@ -386,10 +395,10 @@ cargo test --all-targets   # unit tests only (no server needed)
 cargo nextest run          # same but faster with nextest
 ```
 
-The unit test suite (63 tests) runs entirely in-memory with mock
+The unit test suite (73 tests) runs entirely in-memory
 implementations of the port traits — no database or network required.
 
-The `scripts/test.sh` integration suite (115 assertions) starts the server,
+The `scripts/test.sh` integration suite (131 assertions) starts the server,
 runs curl-based tests against the live API, and leaves the server running for
 further development.
 
@@ -474,8 +483,8 @@ sqlx migrate info    # show status
 | **2** | Restaurant & menu management | ✅ Complete |
 | **3** | Review aggregation (Google / Yelp / TripAdvisor) | ✅ Complete |
 | **4** | AI sentiment analysis & reply drafts | ✅ Complete |
-| **5** | AI marketing content generation (SSE streaming) | 🔲 Next |
-| **6** | Business intelligence & analytics dashboards | 🔲 Planned |
+| **5** | AI marketing content generation (SSE streaming) | ✅ Complete |
+| **6** | Business intelligence & analytics dashboards | 🔲 Next |
 | **7** | Customer engagement — campaigns & AI chat widget | 🔲 Planned |
 | **8** | Stripe billing & subscription tier gating | 🔲 Planned |
 | **9** | Hardening — OpenTelemetry, RLS, load testing, OpenAPI spec | 🔲 Planned |
@@ -493,4 +502,5 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 | [`documentation/phase-1-auth.md`](documentation/phase-1-auth.md) | Phase 1 — JWT strategy, Argon2id, token rotation, rate limiting |
 | [`documentation/phase-2-restaurants.md`](documentation/phase-2-restaurants.md) | Phase 2 — cursor pagination, PATCH pattern, tenant isolation |
 | [`documentation/phase-3-reviews.md`](documentation/phase-3-reviews.md) | Phase 3 — upsert deduplication, descending cursor, external API clients |
-| [`documentation/phase-4-ai.md`](documentation/phase-4-ai.md) | Phase 4 — OpenAI integration, prompt templates, token tracking, reply drafts |
+| [`documentation/phase-4-ai.md`](documentation/phase-4-ai.md) | Phase 4 — `OpenAI` integration, prompt templates, token tracking, reply drafts |
+| [`documentation/phase-5-content.md`](documentation/phase-5-content.md) | Phase 5 — content types, SSE streaming, status lifecycle, cursor pagination |
