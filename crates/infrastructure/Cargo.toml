@@ -22,6 +22,7 @@ hex  = "0.4"
 
 reqwest      = { workspace = true }
 async-openai = { workspace = true }
+futures      = { workspace = true }
 
 [lints]
 workspace = true

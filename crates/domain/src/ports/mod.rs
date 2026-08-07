@@ -1,6 +1,7 @@
 //! Port traits — the interfaces that infrastructure adapters must implement.
 
 pub mod ai_port;
+pub mod content_repository;
 pub mod menu_item_repository;
 pub mod restaurant_repository;
 pub mod review_fetch_port;
