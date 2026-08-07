@@ -49,6 +49,17 @@ fn restaurant_routes(state: &AppState) -> Router<AppState> {
         // Reviews
         .route("/:id/reviews", get(handlers::reviews::list_reviews))
         .route("/:id/reviews/sync", post(handlers::reviews::sync_reviews))
+        // AI features
+        .route("/:id/reviews/analyse", post(handlers::ai::analyse_reviews))
+        .route("/:id/reviews/:rid", get(handlers::ai::get_review))
+        .route(
+            "/:id/reviews/:rid/reply-draft",
+            post(handlers::ai::reply_draft),
+        )
+        .route(
+            "/:id/reviews/:rid/reply-publish",
+            post(handlers::ai::reply_publish),
+        )
         // All restaurant routes require authentication.
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
 }
@@ -102,10 +113,16 @@ pub fn build(state: AppState) -> Router {
     // -----------------------------------------------------------------------
     // Full route tree
     // -----------------------------------------------------------------------
+    // AI usage — requires auth, scoped to tenant (no restaurant ID)
+    let ai_routes = Router::new()
+        .route("/usage", get(handlers::ai::token_usage))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
     Router::new()
         .route("/health", get(handlers::health::health))
         .nest("/api/v1/auth", auth_public.merge(auth_protected))
         .nest("/api/v1/restaurants", restaurant_routes(&state))
+        .nest("/api/v1/ai", ai_routes)
         .layer(trace_layer)
         .layer(CorsLayer::permissive())
         .with_state(state)
