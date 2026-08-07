@@ -4,6 +4,7 @@
 //! each use case.  They know about domain types and configuration but have
 //! **no** knowledge of HTTP, SQL, or Redis.
 
+pub mod ai;
 pub mod auth;
 pub mod restaurant;
 pub mod review;
