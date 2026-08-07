@@ -6,5 +6,6 @@
 
 pub mod ai;
 pub mod auth;
+pub mod content;
 pub mod restaurant;
 pub mod review;
