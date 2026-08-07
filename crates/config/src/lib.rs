@@ -41,6 +41,8 @@ pub struct AiConfig {
     pub max_sentiment_tokens: u32,
     /// Maximum tokens for a reply draft response.
     pub max_reply_tokens: u32,
+    /// Maximum tokens for marketing content generation.
+    pub max_content_tokens: u32,
 }
 
 /// API keys for external review platforms.
