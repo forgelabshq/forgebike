@@ -60,6 +60,16 @@ fn restaurant_routes(state: &AppState) -> Router<AppState> {
             "/:id/reviews/:rid/reply-publish",
             post(handlers::ai::reply_publish),
         )
+        // Content (AI-generated marketing pieces)
+        .route("/:id/content/generate", post(handlers::content::generate))
+        .route("/:id/content/stream", get(handlers::content::stream))
+        .route("/:id/content", get(handlers::content::list))
+        .route(
+            "/:id/content/:cid",
+            get(handlers::content::get_piece)
+                .patch(handlers::content::update)
+                .delete(handlers::content::delete),
+        )
         // All restaurant routes require authentication.
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
 }
