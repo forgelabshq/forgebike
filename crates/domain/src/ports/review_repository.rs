@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     entities::review::{Review, ReviewPlatform},
-    identifiers::{RestaurantId, TenantId},
+    identifiers::{RestaurantId, ReviewId, TenantId},
     pagination::{Cursor, Page},
     DomainError,
 };
@@ -64,4 +64,26 @@ pub trait ReviewRepository: Send + Sync {
         restaurant_id: RestaurantId,
         params: ReviewListParams,
     ) -> Result<Page<Review>, DomainError>;
+
+    /// Look up a single review by primary key, scoped to the tenant.
+    async fn find_by_id(
+        &self,
+        tenant_id: TenantId,
+        id: ReviewId,
+    ) -> Result<Option<Review>, DomainError>;
+
+    /// Return reviews that have no sentiment score yet and have a non-empty
+    /// body.  Used by the AI sentiment-analysis batch endpoint.
+    async fn list_pending_analysis(
+        &self,
+        tenant_id: TenantId,
+        restaurant_id: RestaurantId,
+        limit: i64,
+    ) -> Result<Vec<Review>, DomainError>;
+
+    /// Write the AI-computed sentiment score to a review row.
+    async fn update_sentiment(&self, id: ReviewId, score: f32) -> Result<(), DomainError>;
+
+    /// Save an AI-generated reply draft to a review row.
+    async fn save_reply_draft(&self, id: ReviewId, draft: &str) -> Result<(), DomainError>;
 }
