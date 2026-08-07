@@ -40,6 +40,14 @@ google_places_api_key = ""
 yelp_api_key          = ""
 tripadvisor_api_key   = ""
 
+[ai]
+# Set APP__AI__OPENAI_API_KEY in production to enable AI features.
+# When empty, sentiment analysis and reply drafts are disabled gracefully.
+openai_api_key       = ""
+model                = "gpt-4o-mini"
+max_sentiment_tokens = 60
+max_reply_tokens     = 300
+
 [jwt]
 # IMPORTANT: override APP__JWT__SECRET with a strong secret in production.
 # Generate one with: openssl rand -hex 32
