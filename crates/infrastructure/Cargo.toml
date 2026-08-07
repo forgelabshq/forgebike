@@ -20,7 +20,8 @@ tracing        = { workspace = true }
 sha2 = "0.10"
 hex  = "0.4"
 
-reqwest = { workspace = true }
+reqwest      = { workspace = true }
+async-openai = { workspace = true }
 
 [lints]
 workspace = true
