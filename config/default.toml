@@ -47,6 +47,7 @@ openai_api_key       = ""
 model                = "gpt-4o-mini"
 max_sentiment_tokens = 60
 max_reply_tokens     = 300
+max_content_tokens   = 600
 
 [jwt]
 # IMPORTANT: override APP__JWT__SECRET with a strong secret in production.
