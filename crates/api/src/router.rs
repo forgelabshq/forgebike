@@ -17,7 +17,11 @@ use tower_http::{
 };
 use tracing::Level;
 
-use crate::{handlers, middleware::auth::require_auth, state::AppState};
+use crate::{
+    handlers,
+    middleware::auth::{require_auth, require_ws_auth},
+    state::AppState,
+};
 
 fn restaurant_routes(state: &AppState) -> Router<AppState> {
     use axum::routing::patch;
@@ -173,10 +177,16 @@ pub fn build(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(handlers::health::health))
-        // WebSocket chat — auth via ?token= query param, no middleware wrapper
+        // WebSocket chat — require_ws_auth middleware runs BEFORE the handler so
+        // that auth is checked before WebSocketUpgrade extraction is attempted.
+        // Plain HTTP GETs without a valid ?token= get 401; plain GETs with a
+        // valid token get 400/426 (Upgrade Required) from WebSocketUpgrade.
         .route(
             "/api/v1/ws/chat/:restaurant_id",
-            get(handlers::chat::chat_ws),
+            get(handlers::chat::chat_ws).layer(middleware::from_fn_with_state(
+                state.clone(),
+                require_ws_auth,
+            )),
         )
         .nest("/api/v1/auth", auth_public.merge(auth_protected))
         .nest("/api/v1/restaurants", restaurant_routes(&state))

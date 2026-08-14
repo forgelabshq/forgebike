@@ -8,11 +8,12 @@
 //! [`crate::extractors::role`] extractors.
 
 use axum::{
-    extract::{Request, State},
+    extract::{Query, Request, State},
     middleware::Next,
     response::Response,
 };
 use jsonwebtoken::{decode, DecodingKey, Validation};
+use serde::Deserialize;
 
 use forgebike_application::auth::claims::AccessTokenClaims;
 use forgebike_domain::{
@@ -50,9 +51,43 @@ fn extract_bearer(request: &Request) -> Result<&str, ApiError> {
         .ok_or_else(ApiError::unauthorised)
 }
 
+// ---------------------------------------------------------------------------
+// WebSocket query-param auth
+// ---------------------------------------------------------------------------
+
+/// Query parameters for WebSocket endpoints that carry the JWT in the URL.
+#[derive(Debug, Deserialize)]
+pub struct WsTokenQuery {
+    /// Access JWT — browsers cannot set `Authorization` headers on WS
+    /// handshakes, so the token is passed as a query parameter instead.
+    token: Option<String>,
+}
+
+/// Middleware for WebSocket routes: validates `?token=<jwt>` and injects
+/// [`AuthIdentity`] into request extensions before the handler runs.
+///
+/// By running auth in middleware the check happens **before** axum's
+/// [`axum::extract::ws::WebSocketUpgrade`] extractor, so unauthenticated or
+/// invalidly-authenticated plain-HTTP requests receive `401` rather than
+/// `400 Bad Request` (which is what `WebSocketUpgrade` would return for a
+/// non-upgrade request if the handler ran first).
+pub async fn require_ws_auth(
+    State(state): State<AppState>,
+    Query(q): Query<WsTokenQuery>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let token = q.token.as_deref().unwrap_or("");
+    let identity = decode_token(token, &state.config.jwt.secret)?;
+    request.extensions_mut().insert(identity);
+    Ok(next.run(request).await)
+}
+
+// ---------------------------------------------------------------------------
+// Token decode helper (shared by both auth middleware implementations)
+// ---------------------------------------------------------------------------
+
 /// Validate a raw JWT string and return the decoded identity.
-/// Exposed as `pub(crate)` so the WebSocket chat handler can authenticate
-/// via a `?token=` query parameter instead of the `Authorization` header.
 pub(crate) fn decode_token(token: &str, secret: &str) -> Result<AuthIdentity, ApiError> {
     let mut validation = Validation::default();
     validation.validate_exp = true;
