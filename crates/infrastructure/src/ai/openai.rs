@@ -16,8 +16,8 @@ use std::sync::Arc;
 use async_openai::{
     config::OpenAIConfig,
     types::{
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequestArgs,
+        ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
     },
     Client,
 };
@@ -27,7 +27,8 @@ use futures::StreamExt as _;
 use forgebike_domain::{
     entities::content_piece::ContentType,
     ports::ai_port::{
-        AiContentPort, ContentContext, ContentDraft, ReplyContext, ReplyDraft, SentimentResult,
+        AiContentPort, ChatContext, ChatMessage, ChatReply, ChatRole, ContentContext, ContentDraft,
+        ReplyContext, ReplyDraft, SentimentResult,
     },
     DomainError,
 };
@@ -277,6 +278,92 @@ impl AiContentPort for OpenAiClient {
         }
 
         Ok(split_title_body(&context.content_type, raw, tokens_used))
+    }
+
+    async fn chat(
+        &self,
+        context: &ChatContext,
+        messages: &[ChatMessage],
+    ) -> Result<ChatReply, DomainError> {
+        if self.api_key.is_empty() {
+            return Err(DomainError::ExternalService(
+                "OpenAI API key is not configured — set APP__AI__OPENAI_API_KEY".into(),
+            ));
+        }
+
+        let cuisine_desc = context
+            .cuisine_type
+            .as_deref()
+            .map_or_else(|| " restaurant".to_string(), |c| format!(" {c} restaurant"));
+
+        let persona = context
+            .persona
+            .as_deref()
+            .unwrap_or("friendly, knowledgeable, and concise");
+
+        let system_content = format!(
+            "You are a helpful AI assistant for {}{cuisine_desc} called '{name}'. \
+             Your persona is {persona}. \
+             Help customers with questions about the restaurant including menu, hours, \
+             reservations, and general information. \
+             Keep replies brief and warm. \
+             If you don't know something specific, say so and offer to help in another way.",
+            context.business_name,
+            name = context.business_name,
+        );
+
+        let mut api_messages = vec![ChatCompletionRequestSystemMessageArgs::default()
+            .content(system_content)
+            .build()
+            .map_err(|e| DomainError::ExternalService(e.to_string()))?
+            .into()];
+
+        for msg in messages {
+            let api_msg = match msg.role {
+                ChatRole::User => ChatCompletionRequestUserMessageArgs::default()
+                    .content(msg.content.clone())
+                    .build()
+                    .map_err(|e| DomainError::ExternalService(e.to_string()))?
+                    .into(),
+                ChatRole::Assistant => ChatCompletionRequestAssistantMessageArgs::default()
+                    .content(msg.content.clone())
+                    .build()
+                    .map_err(|e| DomainError::ExternalService(e.to_string()))?
+                    .into(),
+            };
+            api_messages.push(api_msg);
+        }
+
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(&self.model)
+            .max_tokens(512u32)
+            .messages(api_messages)
+            .build()
+            .map_err(|e| DomainError::ExternalService(e.to_string()))?;
+
+        let response =
+            self.client().chat().create(request).await.map_err(|e| {
+                DomainError::ExternalService(format!("OpenAI chat call failed: {e}"))
+            })?;
+
+        let tokens_used = response.usage.map_or(0, |u| u64::from(u.total_tokens));
+
+        let text = response
+            .choices
+            .into_iter()
+            .next()
+            .and_then(|c| c.message.content)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        if text.is_empty() {
+            return Err(DomainError::ExternalService(
+                "OpenAI returned an empty chat reply".into(),
+            ));
+        }
+
+        Ok(ChatReply { text, tokens_used })
     }
 
     async fn stream_content(
