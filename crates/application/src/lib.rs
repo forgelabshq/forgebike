@@ -7,6 +7,8 @@
 pub mod ai;
 pub mod analytics;
 pub mod auth;
+pub mod campaign;
+pub mod contact;
 pub mod content;
 pub mod restaurant;
 pub mod review;
