@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+forgebike-config = { workspace = true }
 forgebike-domain = { workspace = true }
 
 sqlx           = { workspace = true }
@@ -23,6 +24,7 @@ hex  = "0.4"
 reqwest      = { workspace = true }
 async-openai = { workspace = true }
 futures      = { workspace = true }
+lettre       = { workspace = true }
 
 [lints]
 workspace = true
