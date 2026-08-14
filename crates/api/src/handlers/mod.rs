@@ -1,6 +1,9 @@
 pub mod ai;
 pub mod analytics;
 pub mod auth;
+pub mod campaigns;
+pub mod chat;
+pub mod contacts;
 pub mod content;
 pub mod health;
 pub mod restaurants;
