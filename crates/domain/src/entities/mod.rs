@@ -1,5 +1,7 @@
 pub mod auth_identity;
+pub mod campaign;
 pub mod content_piece;
+pub mod customer_contact;
 pub mod menu_item;
 pub mod restaurant;
 pub mod review;
