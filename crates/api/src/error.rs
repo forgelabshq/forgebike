@@ -6,8 +6,8 @@ use axum::{
     Json,
 };
 use forgebike_application::{
-    ai::error::AiError, auth::error::AuthError, content::error::ContentError,
-    restaurant::error::RestaurantError, review::error::ReviewError,
+    ai::error::AiError, analytics::error::AnalyticsError, auth::error::AuthError,
+    content::error::ContentError, restaurant::error::RestaurantError, review::error::ReviewError,
 };
 use forgebike_domain::DomainError;
 use serde_json::json;
@@ -139,6 +139,20 @@ impl From<ReviewError> for ApiError {
                 Self::not_found(format!("Restaurant {id} not found"))
             }
             ReviewError::Domain(domain_err) => Self::from(domain_err),
+        }
+    }
+}
+
+impl From<AnalyticsError> for ApiError {
+    fn from(err: AnalyticsError) -> Self {
+        match err {
+            AnalyticsError::RestaurantNotFound(id) => {
+                Self::not_found(format!("Restaurant {id} not found"))
+            }
+            AnalyticsError::InvalidPeriod(p) => Self::unprocessable(format!(
+                "Invalid period: {p} days. Accepted values: 30, 90, 365"
+            )),
+            AnalyticsError::Domain(d) => Self::from(d),
         }
     }
 }
