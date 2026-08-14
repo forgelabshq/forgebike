@@ -7,5 +7,6 @@
 
 pub mod ai;
 pub mod db;
+pub mod email;
 pub mod redis;
 pub mod review_clients;
