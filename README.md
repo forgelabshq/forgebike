@@ -306,7 +306,7 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 
 ## API Endpoints
 
-### Currently implemented (Phases 0–5)
+### Currently implemented (Phases 0–6)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -338,6 +338,9 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 | `GET` | `/api/v1/restaurants/:id/content/:cid` | Bearer | Get a content piece |
 | `PATCH` | `/api/v1/restaurants/:id/content/:cid` | Bearer | Edit copy or approve/publish a piece |
 | `DELETE` | `/api/v1/restaurants/:id/content/:cid` | Bearer | Delete a content piece |
+| `GET` | `/api/v1/restaurants/:id/analytics/overview` | Bearer | KPI summary — reviews + content over 30/90/365 days |
+| `GET` | `/api/v1/restaurants/:id/analytics/reviews` | Bearer | Review analytics — rating distribution, platform breakdown |
+| `GET` | `/api/v1/restaurants/:id/analytics/content` | Bearer | Content analytics — totals by status and type |
 
 ### Cursor-based pagination
 
@@ -374,12 +377,8 @@ The review list endpoint supports additional query parameters:
 ### Planned (see `documentation/architecture.md` for the full surface)
 
 ```
-POST   /api/v1/restaurants/:id/content/generate
-GET    /api/v1/restaurants/:id/content
-
-GET    /api/v1/restaurants/:id/analytics/overview
-
-WS     /api/v1/ws/chat/:restaurant_id
+POST   /api/v1/billing/webhook            ← Phase 8 — Stripe subscription billing
+WS     /api/v1/ws/chat/:restaurant_id     ← Phase 7 — AI chat widget
 ```
 
 ---
@@ -484,8 +483,8 @@ sqlx migrate info    # show status
 | **3** | Review aggregation (Google / Yelp / TripAdvisor) | ✅ Complete |
 | **4** | AI sentiment analysis & reply drafts | ✅ Complete |
 | **5** | AI marketing content generation (SSE streaming) | ✅ Complete |
-| **6** | Business intelligence & analytics dashboards | 🔲 Next |
-| **7** | Customer engagement — campaigns & AI chat widget | 🔲 Planned |
+| **6** | Business intelligence & analytics dashboards | ✅ Complete |
+| **7** | Customer engagement — campaigns & AI chat widget | 🔲 Next |
 | **8** | Stripe billing & subscription tier gating | 🔲 Planned |
 | **9** | Hardening — OpenTelemetry, RLS, load testing, OpenAPI spec | 🔲 Planned |
 
@@ -504,3 +503,4 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 | [`documentation/phase-3-reviews.md`](documentation/phase-3-reviews.md) | Phase 3 — upsert deduplication, descending cursor, external API clients |
 | [`documentation/phase-4-ai.md`](documentation/phase-4-ai.md) | Phase 4 — `OpenAI` integration, prompt templates, token tracking, reply drafts |
 | [`documentation/phase-5-content.md`](documentation/phase-5-content.md) | Phase 5 — content types, SSE streaming, status lifecycle, cursor pagination |
+| [`documentation/phase-6-analytics.md`](documentation/phase-6-analytics.md) | Phase 6 — real-time BI analytics, Redis caching, SQL aggregations |

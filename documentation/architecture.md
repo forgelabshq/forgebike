@@ -329,6 +329,13 @@ GET    /api/v1/ai/usage                              ← monthly OpenAI token us
 GET    /health                                       ← checks DB + Redis; no auth
 ```
 
+#### Analytics (Phase 6) ✅
+```
+GET    /api/v1/restaurants/:id/analytics/overview    ← KPI summary (reviews + content)
+GET    /api/v1/restaurants/:id/analytics/reviews     ← rating distribution, platform breakdown
+GET    /api/v1/restaurants/:id/analytics/content     ← by status + by type
+```
+
 ### Planned 🔲
 
 #### Campaigns (Phase 7)
@@ -336,13 +343,6 @@ GET    /health                                       ← checks DB + Redis; no a
 GET/POST   /api/v1/restaurants/:id/campaigns
 GET/PATCH/DELETE /api/v1/restaurants/:id/campaigns/:cid
 POST       /api/v1/restaurants/:id/campaigns/:cid/send
-```
-
-#### Analytics (Phase 6)
-```
-GET    /api/v1/restaurants/:id/analytics/overview
-GET    /api/v1/restaurants/:id/analytics/reviews
-GET    /api/v1/restaurants/:id/analytics/content
 ```
 
 #### Billing (Phase 8)
@@ -499,17 +499,20 @@ defence, enforced at the database level independently of application code.
 
 ---
 
-### Phase 6 — Business Intelligence *(Weeks 9–10)* 🔲
+### Phase 6 — Business Intelligence *(Weeks 9–10)* ✅
 
-- [ ] Migration: `analytics_snapshots` table
-- [ ] `ComputeAnalyticsJob` — nightly rollup: avg rating, sentiment trend, content velocity, review response rate
-- [ ] `GET /restaurants/:id/analytics/overview` — last 30 / 90 / 365 day KPIs
-- [ ] `GET /restaurants/:id/analytics/reviews` — rating trend, platform breakdown, sentiment chart
-- [ ] `GET /restaurants/:id/analytics/content` — published vs draft ratio, top content types
-- [ ] Competitor snapshot (public review ratings for neighbouring restaurants)
-- [ ] Redis caching (5-min TTL) on all analytics endpoints
+- [x] `AnalyticsRepository` port trait with three methods (`overview`, `reviews_analytics`, `content_analytics`)
+- [x] `PgAnalyticsRepository` — real-time SQL aggregations using `sqlx::query_as` + `#[derive(FromRow)]`
+- [x] `AnalyticsService` — validates period (30/90/365), verifies tenant, delegates to port
+- [x] `GET /restaurants/:id/analytics/overview` — last 30/90/365 day KPIs
+- [x] `GET /restaurants/:id/analytics/reviews` — rating distribution, platform breakdown, avg sentiment
+- [x] `GET /restaurants/:id/analytics/content` — totals by status and by content type
+- [x] Redis caching (5-min TTL) at the handler layer
+- [x] Unit tests for `AnalyticsService` (5 tests: valid periods, invalid period, cross-tenant denial)
+- [ ] Competitor snapshot (public review ratings — requires Google Places API, deferred)
+- [ ] Pre-computed nightly snapshot table (real-time aggregation sufficient for current scale)
 
-**Exit criterion**: A restaurant owner can view a meaningful analytics dashboard with at least 30 days of data.
+**Exit criterion**: A restaurant owner can view a meaningful analytics dashboard — ✅ met.x
 
 ---
 

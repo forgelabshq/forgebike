@@ -904,6 +904,127 @@ test_phase_5() {
     assert_status "other tenant cannot generate content → 404" "404" "$(status "${R}")"
 }
 
+# ── Phase 6 tests ─────────────────────────────────────────────────────────────────
+test_phase_6() {
+    section "Phase 6 — Business Intelligence & Analytics"
+
+    # Fresh account + restaurant for this phase.
+    local REG
+    REG=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Analytics Corp","email":"p6@test.dev","password":"password99"}')
+    local TOKEN; TOKEN=$(field "$(body "${REG}")" "['access_token']")
+
+    local REST_R
+    REST_R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Analytics Bistro","cuisine_type":"French"}')
+    local REST_ID; REST_ID=$(field "$(body "${REST_R}")" "['id']")
+
+    # ── Auth required ────────────────────────────────────────────────────────
+    subsection "Analytics endpoints require auth"
+    local R
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/overview")
+    assert_status "GET /analytics/overview without token → 401"  "401" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/reviews")
+    assert_status "GET /analytics/reviews without token → 401"   "401" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/content")
+    assert_status "GET /analytics/content without token → 401"   "401" "$(status "${R}")"
+
+    # ── Invalid period → 422 ─────────────────────────────────────────────────
+    subsection "Invalid period → 422"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/overview?period=7" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "period=7 → 422"   "422" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/reviews?period=60" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "period=60 → 422"  "422" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/content?period=999" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "period=999 → 422" "422" "$(status "${R}")"
+
+    # ── Overview endpoint ─────────────────────────────────────────────────────
+    subsection "GET /api/v1/restaurants/:id/analytics/overview"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/overview" \
+        -H "Authorization: Bearer ${TOKEN}")
+    local RB; RB=$(body "${R}")
+    assert_status  "overview (default period=30) → 200"          "200" "$(status "${R}")"
+    assert_present "  period_days present"                              "$(has_field "${RB}" "period_days")"
+    assert_present "  total_reviews present"                            "$(has_field "${RB}" "total_reviews")"
+    assert_present "  total_content present"                            "$(has_field "${RB}" "total_content")"
+    assert_present "  reviews_with_reply present"                       "$(has_field "${RB}" "reviews_with_reply")"
+    assert_eq      "  period_days is 30"                  "30"          "$(field "${RB}" "['period_days']")" 
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/overview?period=90" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "overview period=90 → 200"                       "200" "$(status "${R}")"
+    assert_eq     "  period_days is 90"                   "90"          "$(field "${RB}" "['period_days']")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/overview?period=365" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "overview period=365 → 200"                      "200" "$(status "${R}")"
+    assert_eq     "  period_days is 365"                  "365"         "$(field "${RB}" "['period_days']")"
+
+    # ── Reviews analytics ─────────────────────────────────────────────────────
+    subsection "GET /api/v1/restaurants/:id/analytics/reviews"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/reviews" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status  "reviews analytics → 200"                       "200" "$(status "${R}")"
+    assert_present "  total_reviews present"                             "$(has_field "${RB}" "total_reviews")"
+    assert_present "  rating_distribution present"                       "$(has_field "${RB}" "rating_distribution")"
+    assert_present "  platform_breakdown present"                        "$(has_field "${RB}" "platform_breakdown")"
+    assert_present "  avg_rating present"                                "$(has_field "${RB}" "avg_rating")"
+
+    # ── Content analytics ─────────────────────────────────────────────────────
+    subsection "GET /api/v1/restaurants/:id/analytics/content"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/content" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status  "content analytics → 200"                       "200" "$(status "${R}")"
+    assert_present "  total present"                                     "$(has_field "${RB}" "total")"
+    assert_present "  by_status present"                                 "$(has_field "${RB}" "by_status")"
+    assert_present "  by_type present"                                   "$(has_field "${RB}" "by_type")"
+
+    # ── Unknown restaurant → 404 ──────────────────────────────────────────────
+    subsection "Unknown restaurant → 404"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/analytics/overview" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "unknown restaurant overview → 404"              "404" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/analytics/reviews" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "unknown restaurant reviews → 404"               "404" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/analytics/content" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "unknown restaurant content → 404"               "404" "$(status "${R}")"
+
+    # ── Cross-tenant isolation ────────────────────────────────────────────────
+    subsection "Cross-tenant isolation for analytics"
+    local REG2
+    REG2=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Other Corp","email":"p6other@test.dev","password":"password99"}')
+    local TOKEN2; TOKEN2=$(field "$(body "${REG2}")" "['access_token']")
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/overview" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot see overview → 404"          "404" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/reviews" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot see reviews analytics → 404" "404" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/analytics/content" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot see content analytics → 404" "404" "$(status "${R}")"
+}
+
 # ── Entry point ──────────────────────────────────────────────────────────────────
 main() {
     echo ""
@@ -920,6 +1041,7 @@ main() {
     test_phase_3
     test_phase_4
     test_phase_5
+    test_phase_6
     print_summary
 
     [ "${FAIL}" -gt 0 ] && exit 1 || exit 0
