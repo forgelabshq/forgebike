@@ -83,6 +83,36 @@ fn restaurant_routes(state: &AppState) -> Router<AppState> {
             "/:id/analytics/content",
             get(handlers::analytics::content_analytics),
         )
+        // Customer contacts
+        .route(
+            "/:id/contacts",
+            post(handlers::contacts::create_contact).get(handlers::contacts::list_contacts),
+        )
+        .route(
+            "/:id/contacts/import",
+            post(handlers::contacts::import_contacts),
+        )
+        .route(
+            "/:id/contacts/:cid",
+            get(handlers::contacts::get_contact)
+                .patch(handlers::contacts::update_contact)
+                .delete(handlers::contacts::delete_contact),
+        )
+        // Campaigns
+        .route(
+            "/:id/campaigns",
+            post(handlers::campaigns::create_campaign).get(handlers::campaigns::list_campaigns),
+        )
+        .route(
+            "/:id/campaigns/:cid",
+            get(handlers::campaigns::get_campaign)
+                .patch(handlers::campaigns::update_campaign)
+                .delete(handlers::campaigns::delete_campaign),
+        )
+        .route(
+            "/:id/campaigns/:cid/send",
+            post(handlers::campaigns::send_campaign),
+        )
         // All restaurant routes require authentication.
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
 }
@@ -143,6 +173,11 @@ pub fn build(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(handlers::health::health))
+        // WebSocket chat — auth via ?token= query param, no middleware wrapper
+        .route(
+            "/api/v1/ws/chat/:restaurant_id",
+            get(handlers::chat::chat_ws),
+        )
         .nest("/api/v1/auth", auth_public.merge(auth_protected))
         .nest("/api/v1/restaurants", restaurant_routes(&state))
         .nest("/api/v1/ai", ai_routes)
