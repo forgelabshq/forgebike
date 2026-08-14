@@ -86,6 +86,9 @@ async-openai = "0.28"
 futures      = { version = "0.3", default-features = false, features = ["std"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 
+# --- email (campaign delivery) -----------------------------------------------
+lettre = { version = "0.11", features = ["tokio1-native-tls", "smtp-transport"] }
+
 # --- internal workspace crates ----------------------------------------------
 forgebike-config         = { path = "crates/config" }
 forgebike-domain         = { path = "crates/domain" }
