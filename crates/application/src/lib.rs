@@ -5,6 +5,7 @@
 //! **no** knowledge of HTTP, SQL, or Redis.
 
 pub mod ai;
+pub mod analytics;
 pub mod auth;
 pub mod content;
 pub mod restaurant;
