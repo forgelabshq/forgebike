@@ -478,6 +478,16 @@ mod tests {
                 tokens_used: 40,
             })
         }
+        async fn chat(
+            &self,
+            _context: &forgebike_domain::ports::ai_port::ChatContext,
+            _messages: &[forgebike_domain::ports::ai_port::ChatMessage],
+        ) -> Result<forgebike_domain::ports::ai_port::ChatReply, DomainError> {
+            Ok(forgebike_domain::ports::ai_port::ChatReply {
+                text: "mock chat".into(),
+                tokens_used: 5,
+            })
+        }
     }
 
     struct MockTokens(Mutex<u64>);
