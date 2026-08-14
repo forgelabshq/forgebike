@@ -19,16 +19,19 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 
 use forgebike_api::AppState;
 use forgebike_application::{
-    ai::AiService, analytics::AnalyticsService, auth::AuthService, content::ContentService,
-    restaurant::RestaurantService, review::ReviewService,
+    ai::AiService, analytics::AnalyticsService, auth::AuthService, campaign::CampaignService,
+    contact::ContactService, content::ContentService, restaurant::RestaurantService,
+    review::ReviewService,
 };
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
     ai::OpenAiClient,
     db::{
-        PgAnalyticsRepository, PgContentRepository, PgMenuItemRepository, PgRestaurantRepository,
+        PgAnalyticsRepository, PgCampaignRepository, PgContentRepository,
+        PgCustomerContactRepository, PgMenuItemRepository, PgRestaurantRepository,
         PgReviewRepository, PgTenantRepository, PgUserRepository,
     },
+    email::LettreEmailClient,
     redis::{RedisTokenStore, RedisTokenUsageStore},
     review_clients::{GooglePlacesClient, TripAdvisorClient, YelpFusionClient},
 };
@@ -158,6 +161,20 @@ async fn main() -> anyhow::Result<()> {
         Arc::clone(&restaurant_repo) as _,
     ));
 
+    let contact_repo = Arc::new(PgCustomerContactRepository::new(db.clone()));
+    let campaign_repo = Arc::new(PgCampaignRepository::new(db.clone()));
+    let email_client = Arc::new(LettreEmailClient::new(&config.email));
+    let contact_service = Arc::new(ContactService::new(
+        Arc::clone(&contact_repo) as _,
+        Arc::clone(&restaurant_repo) as _,
+    ));
+    let campaign_service = Arc::new(CampaignService::new(
+        campaign_repo as _,
+        Arc::clone(&contact_repo) as _,
+        Arc::clone(&restaurant_repo) as _,
+        email_client as _,
+    ));
+
     tracing::info!("Services wired");
 
     // -------------------------------------------------------------------------
@@ -173,6 +190,8 @@ async fn main() -> anyhow::Result<()> {
         ai_service,
         content_service,
         analytics_service,
+        contact_service,
+        campaign_service,
     };
 
     let app = forgebike_api::router::build(state);
