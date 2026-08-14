@@ -2,7 +2,10 @@
 
 pub mod ai_port;
 pub mod analytics_port;
+pub mod campaign_repository;
 pub mod content_repository;
+pub mod customer_contact_repository;
+pub mod email_port;
 pub mod menu_item_repository;
 pub mod restaurant_repository;
 pub mod review_fetch_port;
