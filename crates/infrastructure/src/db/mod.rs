@@ -1,5 +1,7 @@
 pub mod analytics_repository;
+pub mod campaign_repository;
 pub mod content_repository;
+pub mod customer_contact_repository;
 pub mod menu_item_repository;
 pub mod restaurant_repository;
 pub mod review_repository;
@@ -7,7 +9,9 @@ pub mod tenant_repository;
 pub mod user_repository;
 
 pub use analytics_repository::PgAnalyticsRepository;
+pub use campaign_repository::PgCampaignRepository;
 pub use content_repository::PgContentRepository;
+pub use customer_contact_repository::PgCustomerContactRepository;
 pub use menu_item_repository::PgMenuItemRepository;
 pub use restaurant_repository::PgRestaurantRepository;
 pub use review_repository::PgReviewRepository;
