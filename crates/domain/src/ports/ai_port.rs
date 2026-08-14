@@ -60,6 +60,40 @@ pub struct ContentContext {
     pub tone: Option<String>,
 }
 
+// ---------------------------------------------------------------------------
+// Chat types (Phase 7)
+// ---------------------------------------------------------------------------
+
+/// Role of a turn in a chat conversation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatRole {
+    User,
+    Assistant,
+}
+
+/// A single turn in a multi-turn chat conversation.
+#[derive(Debug, Clone)]
+pub struct ChatMessage {
+    pub role: ChatRole,
+    pub content: String,
+}
+
+/// Restaurant context passed to the AI chat system prompt.
+#[derive(Debug, Clone)]
+pub struct ChatContext {
+    pub business_name: String,
+    pub cuisine_type: Option<String>,
+    /// Optional persona override set per restaurant (e.g. "friendly and casual").
+    pub persona: Option<String>,
+}
+
+/// Output of a chat turn.
+#[derive(Debug, Clone)]
+pub struct ChatReply {
+    pub text: String,
+    pub tokens_used: u64,
+}
+
 /// Output of a content-generation call (sync or streaming).
 #[derive(Debug, Clone)]
 pub struct ContentDraft {
@@ -107,4 +141,14 @@ pub trait AiContentPort: Send + Sync {
         context: &ContentContext,
         on_chunk: Arc<dyn Fn(String) + Send + Sync>,
     ) -> Result<ContentDraft, DomainError>;
+
+    /// Stateless AI chat: given restaurant context and a conversation history,
+    /// return the next assistant turn.
+    ///
+    /// Returns `Err(DomainError::ExternalService)` when the API key is empty.
+    async fn chat(
+        &self,
+        context: &ChatContext,
+        messages: &[ChatMessage],
+    ) -> Result<ChatReply, DomainError>;
 }
