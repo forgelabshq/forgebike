@@ -70,6 +70,19 @@ fn restaurant_routes(state: &AppState) -> Router<AppState> {
                 .patch(handlers::content::update)
                 .delete(handlers::content::delete),
         )
+        // Analytics (BI dashboard endpoints)
+        .route(
+            "/:id/analytics/overview",
+            get(handlers::analytics::overview),
+        )
+        .route(
+            "/:id/analytics/reviews",
+            get(handlers::analytics::reviews_analytics),
+        )
+        .route(
+            "/:id/analytics/content",
+            get(handlers::analytics::content_analytics),
+        )
         // All restaurant routes require authentication.
         .layer(middleware::from_fn_with_state(state.clone(), require_auth))
 }
