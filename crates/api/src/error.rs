@@ -7,7 +7,8 @@ use axum::{
 };
 use forgebike_application::{
     ai::error::AiError, analytics::error::AnalyticsError, auth::error::AuthError,
-    content::error::ContentError, restaurant::error::RestaurantError, review::error::ReviewError,
+    campaign::error::CampaignError, contact::error::ContactError, content::error::ContentError,
+    restaurant::error::RestaurantError, review::error::ReviewError,
 };
 use forgebike_domain::DomainError;
 use serde_json::json;
@@ -171,6 +172,44 @@ impl From<RestaurantError> for ApiError {
                 format!("Menu item {item_id} does not belong to restaurant {restaurant_id}"),
             ),
             RestaurantError::Domain(domain_err) => Self::from(domain_err),
+        }
+    }
+}
+
+impl From<ContactError> for ApiError {
+    fn from(err: ContactError) -> Self {
+        match err {
+            ContactError::RestaurantNotFound(id) => {
+                Self::not_found(format!("Restaurant {id} not found"))
+            }
+            ContactError::ContactNotFound(id) => Self::not_found(format!("Contact {id} not found")),
+            ContactError::Domain(d) => Self::from(d),
+        }
+    }
+}
+
+impl From<CampaignError> for ApiError {
+    fn from(err: CampaignError) -> Self {
+        match err {
+            CampaignError::RestaurantNotFound(id) => {
+                Self::not_found(format!("Restaurant {id} not found"))
+            }
+            CampaignError::CampaignNotFound(id) => {
+                Self::not_found(format!("Campaign {id} not found"))
+            }
+            CampaignError::NotDraft(id) => Self::new(
+                StatusCode::CONFLICT,
+                format!("Campaign {id} cannot be modified — it is not in draft status"),
+            ),
+            CampaignError::EmailNotConfigured => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Email is not configured — set APP__EMAIL__SMTP_HOST",
+            ),
+            CampaignError::SmsNotAvailable => Self::new(
+                StatusCode::NOT_IMPLEMENTED,
+                "SMS sending is not yet available",
+            ),
+            CampaignError::Domain(d) => Self::from(d),
         }
     }
 }
