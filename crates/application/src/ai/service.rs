@@ -6,7 +6,7 @@ use forgebike_domain::{
     entities::{auth_identity::AuthIdentity, review::Review},
     identifiers::{RestaurantId, ReviewId},
     ports::{
-        ai_port::{AiContentPort, ReplyContext},
+        ai_port::{AiContentPort, ChatContext, ChatMessage, ChatReply, ReplyContext},
         restaurant_repository::RestaurantRepository,
         review_repository::ReviewRepository,
         token_usage_store::TokenUsageStore,
@@ -209,6 +209,41 @@ impl AiService {
         }
 
         Ok(draft.text)
+    }
+
+    /// AI chat for the restaurant widget (`WS /api/v1/ws/chat/:id`).
+    ///
+    /// Verifies restaurant ownership, builds chat context from restaurant metadata,
+    /// calls the AI, records token usage, and returns the reply.
+    pub async fn chat(
+        &self,
+        identity: &AuthIdentity,
+        restaurant_id: RestaurantId,
+        messages: Vec<ChatMessage>,
+    ) -> Result<ChatReply, AiError> {
+        let restaurant = self
+            .restaurants
+            .find_by_id(identity.tenant_id, restaurant_id)
+            .await?
+            .ok_or(AiError::RestaurantNotFound(restaurant_id))?;
+
+        let context = ChatContext {
+            business_name: restaurant.name.clone(),
+            cuisine_type: restaurant.cuisine_type.clone(),
+            persona: None, // configurable per restaurant in a future phase
+        };
+
+        let reply = self
+            .ai_client
+            .chat(&context, &messages)
+            .await
+            .map_err(|_| AiError::AiUnavailable)?;
+
+        self.token_usage
+            .record_usage(identity.tenant_id, reply.tokens_used)
+            .await?;
+
+        Ok(reply)
     }
 
     /// Return the total AI tokens used by this tenant in the current month.
@@ -495,6 +530,25 @@ mod tests {
                 title: None,
                 body: "mock stream".into(),
                 tokens_used: 10,
+            })
+        }
+
+        async fn chat(
+            &self,
+            _context: &forgebike_domain::ports::ai_port::ChatContext,
+            messages: &[forgebike_domain::ports::ai_port::ChatMessage],
+        ) -> Result<forgebike_domain::ports::ai_port::ChatReply, DomainError> {
+            if !self.configured {
+                return Err(DomainError::ExternalService(
+                    "OpenAI API key is not configured".into(),
+                ));
+            }
+            Ok(forgebike_domain::ports::ai_port::ChatReply {
+                text: format!(
+                    "Reply to: {}",
+                    messages.last().map_or("", |m| m.content.as_str())
+                ),
+                tokens_used: 15,
             })
         }
     }
