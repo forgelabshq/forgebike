@@ -50,7 +50,10 @@ fn extract_bearer(request: &Request) -> Result<&str, ApiError> {
         .ok_or_else(ApiError::unauthorised)
 }
 
-fn decode_token(token: &str, secret: &str) -> Result<AuthIdentity, ApiError> {
+/// Validate a raw JWT string and return the decoded identity.
+/// Exposed as `pub(crate)` so the WebSocket chat handler can authenticate
+/// via a `?token=` query parameter instead of the `Authorization` header.
+pub(crate) fn decode_token(token: &str, secret: &str) -> Result<AuthIdentity, ApiError> {
     let mut validation = Validation::default();
     validation.validate_exp = true;
 
