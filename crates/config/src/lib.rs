@@ -27,6 +27,23 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     pub external_apis: ExternalApisConfig,
     pub ai: AiConfig,
+    pub email: EmailConfig,
+}
+
+/// SMTP email configuration for outbound campaign delivery.
+/// When `smtp_host` is empty, email sending is disabled gracefully
+/// (same pattern as the `OpenAI` key for AI features).
+#[derive(Debug, Deserialize, Clone)]
+pub struct EmailConfig {
+    /// SMTP relay hostname.  Empty string = email disabled.
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    /// `From` address shown to recipients.
+    pub from_address: String,
+    /// `From` display name shown to recipients.
+    pub from_name: String,
 }
 
 /// Configuration for the `OpenAI` integration.
