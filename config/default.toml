@@ -56,3 +56,14 @@ max_content_tokens   = 600
 secret                     = "change-me-in-production-use-openssl-rand-hex-32"
 access_token_expiry_secs   = 900      # 15 minutes
 refresh_token_expiry_secs  = 604800   # 7 days
+
+[email]
+# Set APP__EMAIL__SMTP_HOST in production to enable email campaign delivery.
+# When smtp_host is empty, the email client is disabled gracefully (same
+# pattern as the OpenAI key for AI features).
+smtp_host     = ""
+smtp_port     = 587
+smtp_username = ""
+smtp_password = ""
+from_address  = "noreply@forgebike.ai"
+from_name     = "Forgebike"
