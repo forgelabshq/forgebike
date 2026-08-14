@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use deadpool_redis::Pool as RedisPool;
 use forgebike_application::{
-    ai::AiService, auth::AuthService, content::ContentService, restaurant::RestaurantService,
-    review::ReviewService,
+    ai::AiService, analytics::AnalyticsService, auth::AuthService, content::ContentService,
+    restaurant::RestaurantService, review::ReviewService,
 };
 use forgebike_config::Config;
 use sqlx::PgPool;
@@ -37,4 +37,7 @@ pub struct AppState {
 
     /// AI marketing content generation and management use-case service.
     pub content_service: Arc<ContentService>,
+
+    /// Business-intelligence analytics use-case service.
+    pub analytics_service: Arc<AnalyticsService>,
 }
