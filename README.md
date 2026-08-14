@@ -306,7 +306,7 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 
 ## API Endpoints
 
-### Currently implemented (Phases 0–6)
+### Currently implemented (Phases 0–7)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -341,6 +341,19 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 | `GET` | `/api/v1/restaurants/:id/analytics/overview` | Bearer | KPI summary — reviews + content over 30/90/365 days |
 | `GET` | `/api/v1/restaurants/:id/analytics/reviews` | Bearer | Review analytics — rating distribution, platform breakdown |
 | `GET` | `/api/v1/restaurants/:id/analytics/content` | Bearer | Content analytics — totals by status and type |
+| `POST` | `/api/v1/restaurants/:id/contacts` | Bearer | Create a customer contact |
+| `GET` | `/api/v1/restaurants/:id/contacts` | Bearer | List contacts (paginated, `?tag=` filter) |
+| `GET` | `/api/v1/restaurants/:id/contacts/:cid` | Bearer | Get a contact |
+| `PATCH` | `/api/v1/restaurants/:id/contacts/:cid` | Bearer | Update a contact |
+| `DELETE` | `/api/v1/restaurants/:id/contacts/:cid` | Bearer | Delete a contact |
+| `POST` | `/api/v1/restaurants/:id/contacts/import` | Bearer | Bulk-import contacts from JSON array |
+| `POST` | `/api/v1/restaurants/:id/campaigns` | Bearer | Create a campaign |
+| `GET` | `/api/v1/restaurants/:id/campaigns` | Bearer | List campaigns (`?status=` filter) |
+| `GET` | `/api/v1/restaurants/:id/campaigns/:cid` | Bearer | Get a campaign |
+| `PATCH` | `/api/v1/restaurants/:id/campaigns/:cid` | Bearer | Update a draft campaign |
+| `DELETE` | `/api/v1/restaurants/:id/campaigns/:cid` | Bearer | Delete a draft campaign |
+| `POST` | `/api/v1/restaurants/:id/campaigns/:cid/send` | Bearer | Dispatch campaign (email; SMS is 501 stub) |
+| `WS` | `/api/v1/ws/chat/:restaurant_id?token=<jwt>` | JWT query param | AI chat widget — real-time restaurant Q&A |
 
 ### Cursor-based pagination
 
@@ -378,7 +391,6 @@ The review list endpoint supports additional query parameters:
 
 ```
 POST   /api/v1/billing/webhook            ← Phase 8 — Stripe subscription billing
-WS     /api/v1/ws/chat/:restaurant_id     ← Phase 7 — AI chat widget
 ```
 
 ---
@@ -484,8 +496,8 @@ sqlx migrate info    # show status
 | **4** | AI sentiment analysis & reply drafts | ✅ Complete |
 | **5** | AI marketing content generation (SSE streaming) | ✅ Complete |
 | **6** | Business intelligence & analytics dashboards | ✅ Complete |
-| **7** | Customer engagement — campaigns & AI chat widget | 🔲 Next |
-| **8** | Stripe billing & subscription tier gating | 🔲 Planned |
+| **7** | Customer engagement — campaigns & AI chat widget | ✅ Complete |
+| **8** | Stripe billing & subscription tier gating | 🔲 Next |
 | **9** | Hardening — OpenTelemetry, RLS, load testing, OpenAPI spec | 🔲 Planned |
 
 Full details for each phase are in [`documentation/architecture.md`](documentation/architecture.md).
@@ -504,3 +516,4 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 | [`documentation/phase-4-ai.md`](documentation/phase-4-ai.md) | Phase 4 — `OpenAI` integration, prompt templates, token tracking, reply drafts |
 | [`documentation/phase-5-content.md`](documentation/phase-5-content.md) | Phase 5 — content types, SSE streaming, status lifecycle, cursor pagination |
 | [`documentation/phase-6-analytics.md`](documentation/phase-6-analytics.md) | Phase 6 — real-time BI analytics, Redis caching, SQL aggregations |
+| [`documentation/phase-7-engagement.md`](documentation/phase-7-engagement.md) | Phase 7 — contact management, bulk email campaigns, AI chat WebSocket |

@@ -336,14 +336,32 @@ GET    /api/v1/restaurants/:id/analytics/reviews     ← rating distribution, pl
 GET    /api/v1/restaurants/:id/analytics/content     ← by status + by type
 ```
 
-### Planned 🔲
+#### Customer Contacts (Phase 7) ✅
+```
+POST   /api/v1/restaurants/:id/contacts              ← create a contact
+GET    /api/v1/restaurants/:id/contacts              ← list (paginated, ?tag= filter)
+GET    /api/v1/restaurants/:id/contacts/:cid
+PATCH  /api/v1/restaurants/:id/contacts/:cid
+DELETE /api/v1/restaurants/:id/contacts/:cid
+POST   /api/v1/restaurants/:id/contacts/import       ← bulk JSON import
+```
 
-#### Campaigns (Phase 7)
+#### Campaigns (Phase 7) ✅
 ```
-GET/POST   /api/v1/restaurants/:id/campaigns
-GET/PATCH/DELETE /api/v1/restaurants/:id/campaigns/:cid
-POST       /api/v1/restaurants/:id/campaigns/:cid/send
+POST   /api/v1/restaurants/:id/campaigns
+GET    /api/v1/restaurants/:id/campaigns              ← ?status= filter
+GET    /api/v1/restaurants/:id/campaigns/:cid
+PATCH  /api/v1/restaurants/:id/campaigns/:cid         ← draft only
+DELETE /api/v1/restaurants/:id/campaigns/:cid         ← draft only
+POST   /api/v1/restaurants/:id/campaigns/:cid/send   ← dispatches via tokio::spawn
 ```
+
+#### WebSockets (Phase 7) ✅
+```
+WS     /api/v1/ws/chat/:restaurant_id?token=<jwt>    ← AI chat widget; JWT via query param
+```
+
+### Planned 🔲
 
 #### Billing (Phase 8)
 ```
@@ -353,11 +371,6 @@ POST   /api/v1/billing/webhook
 #### Admin (Phase 8)
 ```
 GET/PATCH  /api/v1/admin/tenants/:id/plan
-```
-
-#### WebSockets (Phase 7)
-```
-WS     /api/v1/ws/chat/:restaurant_id
 ```
 
 ---
@@ -516,24 +529,24 @@ defence, enforced at the database level independently of application code.
 
 ---
 
-### Phase 7 — Customer Engagement *(Weeks 11–12)* 🔲
+### Phase 7 — Customer Engagement *(Weeks 11–12)* ✅
 
-- [ ] Migrations: `engagement_campaigns`, `customer_contacts` tables
-- [ ] **Introduce apalis** (Redis backend) for campaign send + analytics rollup jobs
-- [ ] Campaign CRUD and `SendCampaignJob` (email via `lettre`; SMS via Twilio)
-- [ ] Customer contact import (CSV) and manual add
-- [ ] Audience segmentation (last visit, loyalty tier, review left)
-- [ ] AI chat WebSocket endpoint (`WS /api/v1/ws/chat/:restaurant_id`)
+- [x] Migrations: `customer_contacts`, `campaigns` tables
+- [x] Campaign CRUD and send (email via lettre, SMS stub)
+- [x] Customer contact import (JSON array) and manual add
+- [x] Audience segmentation (tag-based)
+- [x] AI chat WebSocket endpoint (`WS /api/v1/ws/chat/:restaurant_id`)
   - Stateless per-message: last N turns in context window
   - AI answers questions about the restaurant (hours, menu, reservations)
-  - Configurable persona per restaurant
-- [ ] Chat session logging (optional, consent-gated)
+  - JWT authenticated via `?token=` query parameter
+- [ ] apalis (using `tokio::spawn` instead — deferred to Phase 9)
+- [ ] Chat session logging (optional, deferred)
 
-**Exit criterion**: A campaign can be sent; the chat widget answers restaurant questions.
+**Exit criterion**: A campaign can be sent; the chat widget answers restaurant questions. ✅
 
 ---
 
-### Phase 8 — Billing & Subscription *(Week 13)* 🔲
+### Phase 8 — Billing & Subscription *(Week 13)* 🔲 Next
 
 - [ ] `POST /api/v1/billing/webhook` — Stripe webhook; verifies signature; updates tenant plan
 - [ ] Plan tiers (`Starter`, `Growth`, `Scale`) gating features in the service layer

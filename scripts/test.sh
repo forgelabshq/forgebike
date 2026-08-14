@@ -193,14 +193,53 @@ start_infrastructure() {
     fi
 }
 
+# ── Detect whether the running server has Phase 7 routes ─────────────────────
+# Returns 0 (true) when a Phase 7 route is reachable, 1 otherwise.
+# We probe GET /api/v1/restaurants/<nil-uuid>/contacts without a token.
+# If Phase 7 is loaded the auth middleware fires first → 401.
+# If Phase 7 is absent (old binary) the route doesn't exist → 404.
+server_has_phase7() {
+    local probe
+    probe=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" \
+        "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/contacts" \
+        2>/dev/null)
+    [ "${probe}" = "401" ]
+}
+
+# ── Kill any server process that owns port 8080 ──────────────────────────────
+kill_old_server() {
+    # Try the PID we launched first, then fall back to pkill.
+    if [ -n "${SERVER_PID}" ]; then
+        kill "${SERVER_PID}" 2>/dev/null || true
+        SERVER_PID=""
+    fi
+    # cargo-watch spawns a child; kill the whole process group by name.
+    pkill -f 'target/debug/forgebike' 2>/dev/null || true
+    pkill -f 'cargo-watch'            2>/dev/null || true
+    # Wait up to 10 s for the port to free.
+    local i=0
+    while curl -s --max-time 1 "${BASE_URL}/health" > /dev/null 2>&1; do
+        sleep 1; i=$((i+1))
+        [ $i -ge 10 ] && break
+    done
+}
+
 # ── Server ─────────────────────────────────────────────────────────────────────
 start_server() {
     section "Server"
 
-    # Already running? Nothing to do.
+    # Already running? Check whether it has Phase 7 routes.
     if curl -s --max-time 2 "${BASE_URL}/health" > /dev/null 2>&1; then
-        info "Server already running at ${BASE_URL}"
-        return
+        if server_has_phase7; then
+            info "Server already running at ${BASE_URL} (Phase 7 routes present)"
+            return
+        else
+            warn "Server running but is missing Phase 7 routes (stale binary)."
+            warn "Killing and restarting with current code…"
+            WE_STARTED_SERVER=false
+            kill_old_server
+            sleep 1
+        fi
     fi
 
     if cargo watch --version > /dev/null 2>&1; then
@@ -1025,6 +1064,234 @@ test_phase_6() {
     assert_status "other tenant cannot see content analytics → 404" "404" "$(status "${R}")"
 }
 
+# ── Phase 7 tests ─────────────────────────────────────────────────────────────────
+test_phase_7() {
+    section "Phase 7 — Customer Engagement"
+
+    # Fresh account + restaurant for this phase.
+    local REG
+    REG=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Engage Corp","email":"p7@test.dev","password":"password99"}')
+    local TOKEN; TOKEN=$(field "$(body "${REG}")" "['access_token']")
+
+    local REST_R
+    REST_R=$(_POST "${BASE_URL}/api/v1/restaurants" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Engage Bistro","cuisine_type":"Italian"}')
+    local REST_ID; REST_ID=$(field "$(body "${REST_R}")" "['id']")
+
+    # ── Contacts — auth required ──────────────────────────────────────────
+    subsection "Contact endpoints require auth"
+    local R
+    R=$(_GET  "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts")
+    assert_status "GET /contacts without token → 401"    "401" "$(status "${R}")"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts" \
+        -d '{"name":"Alice"}')
+    assert_status "POST /contacts without token → 401"   "401" "$(status "${R}")"
+
+    # ── Contacts — CRUD ────────────────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/contacts"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Alice Wonderland","email":"alice@example.com","tags":["vip","newsletter"]}')
+    local RB; RB=$(body "${R}")
+    assert_status  "create contact → 201"                 "201" "$(status "${R}")"
+    assert_present "  id present"                              "$(has_field "${RB}" "id")"
+    assert_eq      "  name correct"            "Alice Wonderland" "$(field "${RB}" "['name']")" 
+    assert_present "  tags present"                           "$(has_field "${RB}" "tags")"
+    local CONTACT_ID; CONTACT_ID=$(field "${RB}" "['id']")
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":""}')
+    assert_status "create contact empty name → 422"        "422" "$(status "${R}")"
+
+    subsection "GET /api/v1/restaurants/:id/contacts"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status  "list contacts → 200"                   "200" "$(status "${R}")"
+    assert_present "  items present"                           "$(has_field "${RB}" "items")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts?tag=vip" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list contacts by tag → 200"             "200" "$(status "${R}")"
+
+    subsection "GET /api/v1/restaurants/:id/contacts/:cid"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts/${CONTACT_ID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "get contact → 200"                      "200" "$(status "${R}")"
+    assert_eq     "  id matches"   "${CONTACT_ID}"              "$(field "${RB}" "['id']")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts/00000000-0000-0000-0000-000000000000" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "get unknown contact → 404"              "404" "$(status "${R}")"
+
+    subsection "PATCH /api/v1/restaurants/:id/contacts/:cid"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts/${CONTACT_ID}" \
+        -X PATCH -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Alice Updated","tags":["vip"]}')
+    RB=$(body "${R}")
+    assert_status "update contact → 200"                   "200" "$(status "${R}")"
+    assert_eq     "  name updated"  "Alice Updated"             "$(field "${RB}" "['name']")"
+
+    # ── Contacts — bulk import ─────────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/contacts/import"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts/import" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"contacts":[{"name":"Bob","email":"bob@example.com"},{"name":"Carol","email":"carol@example.com"}]}')
+    RB=$(body "${R}")
+    assert_status  "bulk import → 201"                     "201" "$(status "${R}")"
+    assert_present "  imported count present"                  "$(has_field "${RB}" "imported")"
+
+    # ── Campaigns — auth required ─────────────────────────────────────────
+    subsection "Campaign endpoints require auth"
+    R=$(_GET  "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns")
+    assert_status "GET /campaigns without token → 401"     "401" "$(status "${R}")"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns" \
+        -d '{"name":"Test","body":"Hello"}')
+    assert_status "POST /campaigns without token → 401"    "401" "$(status "${R}")"
+
+    # ── Campaigns — CRUD ────────────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/campaigns"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Summer Launch","channel":"email","subject":"Big news!","body":"Check out our summer menu."}')
+    RB=$(body "${R}")
+    assert_status  "create campaign → 201"                  "201" "$(status "${R}")"
+    assert_present "  id present"                               "$(has_field "${RB}" "id")"
+    assert_eq      "  name correct"         "Summer Launch"      "$(field "${RB}" "['name']")" 
+    assert_eq      "  status is draft"      "draft"              "$(field "${RB}" "['status']")"
+    local CAMP_ID; CAMP_ID=$(field "${RB}" "['id']")
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"","body":"x"}')
+    assert_status "create campaign empty name → 422"        "422" "$(status "${R}")"
+
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"SMS Test","channel":"sms","body":"SMS text here"}')
+    RB=$(body "${R}")
+    assert_status "create SMS campaign → 201"                "201" "$(status "${R}")"
+    assert_eq     "  channel is sms"     "sms"                   "$(field "${RB}" "['channel']")"
+    local SMS_CAMP_ID; SMS_CAMP_ID=$(field "${RB}" "['id']")
+
+    subsection "GET /api/v1/restaurants/:id/campaigns"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status  "list campaigns → 200"                    "200" "$(status "${R}")"
+    assert_present "  items present"                            "$(has_field "${RB}" "items")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns?status=draft" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list campaigns by status → 200"           "200" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns?status=badstatus" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "list with invalid status → 422"           "422" "$(status "${R}")"
+
+    subsection "GET /api/v1/restaurants/:id/campaigns/:cid"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/${CAMP_ID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    RB=$(body "${R}")
+    assert_status "get campaign → 200"                       "200" "$(status "${R}")"
+    assert_eq     "  id matches"     "${CAMP_ID}"                "$(field "${RB}" "['id']")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/00000000-0000-0000-0000-000000000000" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "get unknown campaign → 404"               "404" "$(status "${R}")"
+
+    subsection "PATCH /api/v1/restaurants/:id/campaigns/:cid"
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/${CAMP_ID}" \
+        -X PATCH -H "Authorization: Bearer ${TOKEN}" \
+        -d '{"name":"Summer Launch v2","subject":"Even bigger news!"}')
+    RB=$(body "${R}")
+    assert_status "update campaign → 200"                    "200" "$(status "${R}")"
+    assert_eq     "  name updated"  "Summer Launch v2"          "$(field "${RB}" "['name']")"
+
+    # ── Campaigns — send ───────────────────────────────────────────────────
+    subsection "POST /api/v1/restaurants/:id/campaigns/:cid/send"
+    # SMS campaign returns 501 Not Implemented.
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/${SMS_CAMP_ID}/send" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "send SMS campaign → 501"                  "501" "$(status "${R}")"
+
+    # Email campaign without SMTP configured returns 503.
+    R=$(_POST "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/${CAMP_ID}/send" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "send email campaign (no SMTP) → 503"      "503" "$(status "${R}")"
+
+    # ── Delete draft / non-draft protection ────────────────────────────────
+    subsection "DELETE /api/v1/restaurants/:id/campaigns/:cid"
+    # Delete the SMS campaign (it's still draft)
+    R=$(curl -s --max-time 10 -w "\n%{http_code}" -X DELETE \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/${SMS_CAMP_ID}")
+    assert_status "delete draft campaign → 204"             "204" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns/${SMS_CAMP_ID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "get deleted campaign → 404"              "404" "$(status "${R}")"
+
+    # Delete contact
+    subsection "DELETE /api/v1/restaurants/:id/contacts/:cid"
+    R=$(curl -s --max-time 10 -w "\n%{http_code}" -X DELETE \
+        -H "Authorization: Bearer ${TOKEN}" \
+        "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts/${CONTACT_ID}")
+    assert_status "delete contact → 204"                    "204" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts/${CONTACT_ID}" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "get deleted contact → 404"               "404" "$(status "${R}")"
+
+    # ── Unknown restaurant → 404 ─────────────────────────────────────────────
+    subsection "Unknown restaurant → 404"
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/contacts" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "contacts for unknown restaurant → 404"   "404" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/00000000-0000-0000-0000-000000000000/campaigns" \
+        -H "Authorization: Bearer ${TOKEN}")
+    assert_status "campaigns for unknown restaurant → 404"  "404" "$(status "${R}")"
+
+    # ── Cross-tenant isolation ────────────────────────────────────────────────
+    subsection "Cross-tenant isolation for engagement endpoints"
+    local REG2
+    REG2=$(_POST "${BASE_URL}/api/v1/auth/register" \
+        -d '{"business_name":"Other Corp","email":"p7other@test.dev","password":"password99"}')
+    local TOKEN2; TOKEN2=$(field "$(body "${REG2}")" "['access_token']")
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/contacts" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot see contacts → 404"  "404" "$(status "${R}")"
+
+    R=$(_GET "${BASE_URL}/api/v1/restaurants/${REST_ID}/campaigns" \
+        -H "Authorization: Bearer ${TOKEN2}")
+    assert_status "other tenant cannot see campaigns → 404" "404" "$(status "${R}")"
+
+    # ── AI Chat WebSocket ───────────────────────────────────────────────────
+    subsection "GET /api/v1/ws/chat/:restaurant_id"
+    # Without a token the upgrade should be refused with 401.
+    R=$(_GET "${BASE_URL}/api/v1/ws/chat/${REST_ID}")
+    assert_status "WS chat without token → 401"             "401" "$(status "${R}")"
+
+    # With a bad token the upgrade should be refused with 401.
+    R=$(_GET "${BASE_URL}/api/v1/ws/chat/${REST_ID}?token=not.a.real.jwt")
+    assert_status "WS chat with bad token → 401"            "401" "$(status "${R}")"
+
+    # With a valid token (but no Upgrade header) axum returns 400/426.
+    R=$(_GET "${BASE_URL}/api/v1/ws/chat/${REST_ID}?token=${TOKEN}")
+    local WS_STATUS; WS_STATUS=$(status "${R}")
+    if [ "${WS_STATUS}" = "400" ] || [ "${WS_STATUS}" = "426" ]; then
+        _pass "WS chat with valid token → 4xx (upgrade required, not 401)"
+    else
+        _fail "WS chat with valid token" "expected 400 or 426, got ${WS_STATUS}"
+    fi
+}
+
 # ── Entry point ──────────────────────────────────────────────────────────────────
 main() {
     echo ""
@@ -1042,6 +1309,7 @@ main() {
     test_phase_4
     test_phase_5
     test_phase_6
+    test_phase_7
     print_summary
 
     [ "${FAIL}" -gt 0 ] && exit 1 || exit 0
