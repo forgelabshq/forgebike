@@ -19,15 +19,15 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 
 use forgebike_api::AppState;
 use forgebike_application::{
-    ai::AiService, auth::AuthService, content::ContentService, restaurant::RestaurantService,
-    review::ReviewService,
+    ai::AiService, analytics::AnalyticsService, auth::AuthService, content::ContentService,
+    restaurant::RestaurantService, review::ReviewService,
 };
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
     ai::OpenAiClient,
     db::{
-        PgContentRepository, PgMenuItemRepository, PgRestaurantRepository, PgReviewRepository,
-        PgTenantRepository, PgUserRepository,
+        PgAnalyticsRepository, PgContentRepository, PgMenuItemRepository, PgRestaurantRepository,
+        PgReviewRepository, PgTenantRepository, PgUserRepository,
     },
     redis::{RedisTokenStore, RedisTokenUsageStore},
     review_clients::{GooglePlacesClient, TripAdvisorClient, YelpFusionClient},
@@ -152,6 +152,12 @@ async fn main() -> anyhow::Result<()> {
         Arc::clone(&token_usage) as _,
     ));
 
+    let analytics_repo = Arc::new(PgAnalyticsRepository::new(db.clone()));
+    let analytics_service = Arc::new(AnalyticsService::new(
+        analytics_repo as _,
+        Arc::clone(&restaurant_repo) as _,
+    ));
+
     tracing::info!("Services wired");
 
     // -------------------------------------------------------------------------
@@ -166,6 +172,7 @@ async fn main() -> anyhow::Result<()> {
         review_service,
         ai_service,
         content_service,
+        analytics_service,
     };
 
     let app = forgebike_api::router::build(state);
