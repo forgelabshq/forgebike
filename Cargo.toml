@@ -89,6 +89,9 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 # --- email (campaign delivery) -----------------------------------------------
 lettre = { version = "0.11", features = ["tokio1-native-tls", "smtp-transport"] }
 
+# --- billing (Stripe webhook signature verification) -------------------------
+hmac = { version = "0.12", features = [] }
+
 # --- internal workspace crates ----------------------------------------------
 forgebike-config         = { path = "crates/config" }
 forgebike-domain         = { path = "crates/domain" }
