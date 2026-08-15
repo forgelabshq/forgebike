@@ -67,3 +67,16 @@ smtp_username = ""
 smtp_password = ""
 from_address  = "noreply@forgebike.ai"
 from_name     = "Forgebike"
+
+[stripe]
+# Set APP__STRIPE__WEBHOOK_SECRET in production (from Stripe dashboard).
+# When empty, webhook verification is disabled (always accepts — dev only).
+webhook_secret  = ""
+price_id_growth = ""
+price_id_scale  = ""
+
+[admin]
+# Shared secret for admin endpoints (X-Admin-Key header).
+# Set APP__ADMIN__SECRET_KEY to a strong random value in production.
+# When empty, admin endpoints return 403 for all requests.
+secret_key = ""
