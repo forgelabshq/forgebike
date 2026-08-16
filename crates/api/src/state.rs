@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use deadpool_redis::Pool as RedisPool;
 use forgebike_application::{
-    ai::AiService, analytics::AnalyticsService, auth::AuthService, campaign::CampaignService,
-    contact::ContactService, content::ContentService, restaurant::RestaurantService,
-    review::ReviewService,
+    ai::AiService, analytics::AnalyticsService, auth::AuthService, billing::BillingService,
+    campaign::CampaignService, contact::ContactService, content::ContentService,
+    restaurant::RestaurantService, review::ReviewService,
 };
 use forgebike_config::Config;
 use sqlx::PgPool;
@@ -47,4 +47,7 @@ pub struct AppState {
 
     /// Campaign CRUD and send use-case service.
     pub campaign_service: Arc<CampaignService>,
+
+    /// Billing, plan enforcement, and Stripe webhook processing service.
+    pub billing_service: Arc<BillingService>,
 }
