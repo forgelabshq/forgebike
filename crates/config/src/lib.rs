@@ -28,6 +28,32 @@ pub struct Config {
     pub external_apis: ExternalApisConfig,
     pub ai: AiConfig,
     pub email: EmailConfig,
+    pub stripe: StripeConfig,
+    pub admin: AdminConfig,
+}
+
+/// Stripe billing configuration.
+///
+/// All fields default to empty strings; Stripe features are disabled
+/// gracefully when `webhook_secret` is empty.
+#[derive(Debug, Deserialize, Clone)]
+pub struct StripeConfig {
+    /// Stripe webhook signing secret (`whsec_…`).  Empty = webhook disabled.
+    pub webhook_secret: String,
+    /// Stripe price ID that maps to the **Growth** plan.
+    pub price_id_growth: String,
+    /// Stripe price ID that maps to the **Scale** plan.
+    pub price_id_scale: String,
+}
+
+/// Internal admin API configuration.
+///
+/// Admin endpoints (`/api/v1/admin/…`) require an `X-Admin-Key` header
+/// matching this secret.  Empty string disables all admin endpoints.
+#[derive(Debug, Deserialize, Clone)]
+pub struct AdminConfig {
+    /// Shared secret for admin endpoints.  Set via `APP__ADMIN__SECRET_KEY`.
+    pub secret_key: String,
 }
 
 /// SMTP email configuration for outbound campaign delivery.
