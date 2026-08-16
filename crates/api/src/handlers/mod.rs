@@ -1,6 +1,8 @@
+pub mod admin;
 pub mod ai;
 pub mod analytics;
 pub mod auth;
+pub mod billing;
 pub mod campaigns;
 pub mod chat;
 pub mod contacts;
