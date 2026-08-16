@@ -19,9 +19,9 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
 
 use forgebike_api::AppState;
 use forgebike_application::{
-    ai::AiService, analytics::AnalyticsService, auth::AuthService, campaign::CampaignService,
-    contact::ContactService, content::ContentService, restaurant::RestaurantService,
-    review::ReviewService,
+    ai::AiService, analytics::AnalyticsService, auth::AuthService, billing::BillingService,
+    campaign::CampaignService, contact::ContactService, content::ContentService,
+    restaurant::RestaurantService, review::ReviewService,
 };
 use forgebike_config::{Config, Environment};
 use forgebike_infrastructure::{
@@ -34,6 +34,7 @@ use forgebike_infrastructure::{
     email::LettreEmailClient,
     redis::{RedisTokenStore, RedisTokenUsageStore},
     review_clients::{GooglePlacesClient, TripAdvisorClient, YelpFusionClient},
+    stripe::StripeClient,
 };
 
 #[tokio::main]
@@ -175,6 +176,15 @@ async fn main() -> anyhow::Result<()> {
         email_client as _,
     ));
 
+    let stripe_client = Arc::new(StripeClient::new(&config.stripe));
+    let tenant_repo_for_billing = Arc::new(PgTenantRepository::new(db.clone()));
+    let billing_service = Arc::new(BillingService::new(
+        tenant_repo_for_billing as _,
+        stripe_client as _,
+        Arc::clone(&token_usage) as _,
+        config.stripe.clone(),
+    ));
+
     tracing::info!("Services wired");
 
     // -------------------------------------------------------------------------
@@ -192,7 +202,26 @@ async fn main() -> anyhow::Result<()> {
         analytics_service,
         contact_service,
         campaign_service,
+        billing_service: Arc::clone(&billing_service),
     };
+
+    // -------------------------------------------------------------------------
+    // 6a. Billing audit background task (runs daily)
+    // -------------------------------------------------------------------------
+    {
+        let audit = Arc::clone(&billing_service);
+        tokio::spawn(async move {
+            use tokio::time::{interval, Duration};
+            // Stagger the first run by 60 s so startup logs are clean.
+            tokio::time::sleep(Duration::from_mins(1)).await;
+            let mut ticker = interval(Duration::from_hours(24));
+            loop {
+                ticker.tick().await;
+                audit.run_usage_audit().await;
+            }
+        });
+        tracing::info!("Billing audit task scheduled (daily)");
+    }
 
     let app = forgebike_api::router::build(state);
 
