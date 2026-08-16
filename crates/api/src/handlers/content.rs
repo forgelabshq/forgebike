@@ -150,6 +150,12 @@ pub async fn generate(
     Path(restaurant_id): Path<Uuid>,
     ValidatedJson(body): ValidatedJson<GenerateBody>,
 ) -> ApiResult<impl IntoResponse> {
+    state
+        .billing_service
+        .check_ai_budget(identity.tenant_id)
+        .await
+        .map_err(ApiError::from)?;
+
     let cmd = build_generate_cmd(&body)?;
     let piece = state
         .content_service
@@ -174,6 +180,12 @@ pub async fn stream(
     Path(restaurant_id): Path<Uuid>,
     Query(q): Query<GenerateBody>,
 ) -> ApiResult<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>> {
+    state
+        .billing_service
+        .check_ai_budget(identity.tenant_id)
+        .await
+        .map_err(ApiError::from)?;
+
     let cmd = build_generate_cmd(&q)?;
 
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<String>();
