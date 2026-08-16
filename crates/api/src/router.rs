@@ -175,8 +175,23 @@ pub fn build(state: AppState) -> Router {
         .route("/usage", get(handlers::ai::token_usage))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 
+    // -----------------------------------------------------------------------
+    // Admin routes — protected by X-Admin-Key header (no Bearer JWT)
+    // -----------------------------------------------------------------------
+    let admin_routes = Router::new().route(
+        "/tenants/:id/plan",
+        get(handlers::admin::get_tenant_plan).patch(handlers::admin::set_tenant_plan),
+    );
+
     Router::new()
         .route("/health", get(handlers::health::health))
+        // Stripe billing webhook — auth via Stripe-Signature header
+        .route(
+            "/api/v1/billing/webhook",
+            post(handlers::billing::stripe_webhook),
+        )
+        // Admin endpoints — auth via X-Admin-Key header
+        .nest("/api/v1/admin", admin_routes)
         // WebSocket chat — require_ws_auth middleware runs BEFORE the handler so
         // that auth is checked before WebSocketUpgrade extraction is attempted.
         // Plain HTTP GETs without a valid ?token= get 401; plain GETs with a
