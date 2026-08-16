@@ -296,6 +296,32 @@ mod tests {
         async fn find_by_id(&self, id: TenantId) -> Result<Option<Tenant>, DomainError> {
             Ok(self.0.lock().unwrap().iter().find(|t| t.id == id).cloned())
         }
+
+        async fn update_plan(
+            &self,
+            id: TenantId,
+            plan: PlanTier,
+            _stripe_customer_id: Option<&str>,
+        ) -> Result<Tenant, DomainError> {
+            let mut lock = self.0.lock().unwrap();
+            let t = lock
+                .iter_mut()
+                .find(|t| t.id == id)
+                .ok_or_else(|| DomainError::NotFound(format!("Tenant {id} not found")))?;
+            t.plan_tier = plan;
+            Ok(t.clone())
+        }
+
+        async fn find_by_stripe_customer_id(
+            &self,
+            _stripe_customer_id: &str,
+        ) -> Result<Option<Tenant>, DomainError> {
+            Ok(None)
+        }
+
+        async fn list_all(&self) -> Result<Vec<Tenant>, DomainError> {
+            Ok(self.0.lock().unwrap().clone())
+        }
     }
 
     struct MockTokens(Mutex<HashMap<String, StoredTokenData>>);
