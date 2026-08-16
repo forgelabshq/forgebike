@@ -107,6 +107,13 @@ pub async fn analyse_reviews(
     Extension(identity): Extension<AuthIdentity>,
     Path(restaurant_id): Path<Uuid>,
 ) -> ApiResult<impl IntoResponse> {
+    // Check AI token budget before making any OpenAI calls.
+    state
+        .billing_service
+        .check_ai_budget(identity.tenant_id)
+        .await
+        .map_err(ApiError::from)?;
+
     let result = state
         .ai_service
         .analyse_pending_reviews(&identity, RestaurantId::from_uuid(restaurant_id))
@@ -132,6 +139,12 @@ pub async fn reply_draft(
     Extension(identity): Extension<AuthIdentity>,
     Path((restaurant_id, review_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<impl IntoResponse> {
+    state
+        .billing_service
+        .check_ai_budget(identity.tenant_id)
+        .await
+        .map_err(ApiError::from)?;
+
     let draft = state
         .ai_service
         .generate_reply_draft(
