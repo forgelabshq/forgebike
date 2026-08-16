@@ -7,8 +7,8 @@ use axum::{
 };
 use forgebike_application::{
     ai::error::AiError, analytics::error::AnalyticsError, auth::error::AuthError,
-    campaign::error::CampaignError, contact::error::ContactError, content::error::ContentError,
-    restaurant::error::RestaurantError, review::error::ReviewError,
+    billing::error::BillingError, campaign::error::CampaignError, contact::error::ContactError,
+    content::error::ContentError, restaurant::error::RestaurantError, review::error::ReviewError,
 };
 use forgebike_domain::DomainError;
 use serde_json::json;
@@ -184,6 +184,37 @@ impl From<ContactError> for ApiError {
             }
             ContactError::ContactNotFound(id) => Self::not_found(format!("Contact {id} not found")),
             ContactError::Domain(d) => Self::from(d),
+        }
+    }
+}
+
+impl From<BillingError> for ApiError {
+    fn from(err: BillingError) -> Self {
+        match err {
+            BillingError::InvalidSignature(msg) => Self::new(
+                StatusCode::BAD_REQUEST,
+                format!("Invalid webhook signature: {msg}"),
+            ),
+            BillingError::CustomerNotFound(id) => {
+                Self::not_found(format!("Stripe customer {id} not found"))
+            }
+            BillingError::TenantNotFound(id) => Self::not_found(format!("Tenant {id} not found")),
+            BillingError::BudgetExceeded { used, limit } => Self::new(
+                StatusCode::PAYMENT_REQUIRED,
+                format!("Monthly AI token budget exceeded: {used}/{limit} tokens used"),
+            ),
+            BillingError::FeatureNotAvailable { plan } => Self::new(
+                StatusCode::PAYMENT_REQUIRED,
+                format!("Feature not available on the {plan} plan — upgrade to unlock"),
+            ),
+            BillingError::Forbidden => {
+                Self::new(StatusCode::FORBIDDEN, "Valid X-Admin-Key header required")
+            }
+            BillingError::ParseError(msg) => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                format!("Event parse error: {msg}"),
+            ),
+            BillingError::Domain(d) => Self::from(d),
         }
     }
 }
