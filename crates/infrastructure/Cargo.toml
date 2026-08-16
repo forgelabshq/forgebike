@@ -17,8 +17,9 @@ async-trait    = { workspace = true }
 thiserror      = { workspace = true }
 tracing        = { workspace = true }
 
-# Kept out of the workspace — only infrastructure hashes tokens, no other crate needs these.
+# Kept out of the workspace — only infrastructure needs these crypto primitives.
 sha2 = "0.10"
+hmac = { workspace = true }
 hex  = "0.4"
 
 reqwest      = { workspace = true }
