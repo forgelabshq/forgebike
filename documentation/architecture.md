@@ -361,17 +361,20 @@ POST   /api/v1/restaurants/:id/campaigns/:cid/send   ← dispatches via tokio::s
 WS     /api/v1/ws/chat/:restaurant_id?token=<jwt>    ← AI chat widget; JWT via query param
 ```
 
+#### Billing (Phase 8) ✅
+```
+POST   /api/v1/billing/webhook                       ← Stripe webhook; HMAC-SHA256 signature verification
+```
+
+#### Admin (Phase 8) ✅
+```
+GET    /api/v1/admin/tenants/:id/plan                ← get plan tier + monthly AI token usage
+PATCH  /api/v1/admin/tenants/:id/plan                ← override plan tier (X-Admin-Key auth)
+```
+
 ### Planned 🔲
 
-#### Billing (Phase 8)
-```
-POST   /api/v1/billing/webhook
-```
-
-#### Admin (Phase 8)
-```
-GET/PATCH  /api/v1/admin/tenants/:id/plan
-```
+See Phase 9 for upcoming hardening and observability work.
 
 ---
 
@@ -546,19 +549,20 @@ defence, enforced at the database level independently of application code.
 
 ---
 
-### Phase 8 — Billing & Subscription *(Week 13)* 🔲 Next
+### Phase 8 — Billing & Subscription *(Week 13)* ✅
 
-- [ ] `POST /api/v1/billing/webhook` — Stripe webhook; verifies signature; updates tenant plan
-- [ ] Plan tiers (`Starter`, `Growth`, `Scale`) gating features in the service layer
-- [ ] AI token budget enforcement (uses the Redis counters from Phase 1)
-- [ ] `AuditPlanUsageJob` — daily; alerts tenant when approaching AI token cap
-- [ ] Admin endpoints for manually adjusting tenant plan
+- [x] `POST /api/v1/billing/webhook` — Stripe webhook; HMAC-SHA256 signature verification
+- [x] Plan tiers (Starter/Growth/Scale) with `PlanLimits` struct
+- [x] AI token budget enforcement at handler level (402 when exceeded)
+- [x] Daily usage audit background task (`tokio::spawn` loop, warns at 80%/100%)
+- [x] Admin endpoints `GET/PATCH /api/v1/admin/tenants/:id/plan` (X-Admin-Key auth)
+- [ ] Stripe webhook auto-testing in CI (needs real Stripe account; dev bypass works)
 
-**Exit criterion**: A tenant can be moved between plan tiers and feature access is correctly gated.
+**Exit criterion**: A tenant can be moved between plan tiers and feature access is correctly gated. ✅
 
 ---
 
-### Phase 9 — Hardening & Observability *(Week 14+)* 🔲
+### Phase 9 — Hardening & Observability *(Week 14+)* 🔲 Next
 
 - [ ] OpenTelemetry export (Jaeger / Honeycomb) via `tracing-opentelemetry`
 - [ ] Structured log shipping (stdout JSON → Loki / Datadog)

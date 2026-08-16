@@ -306,7 +306,7 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 
 ## API Endpoints
 
-### Currently implemented (Phases 0–7)
+### Currently implemented (Phases 0–8)
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -354,6 +354,9 @@ The entire workspace prohibits `unsafe` code at the compiler level.
 | `DELETE` | `/api/v1/restaurants/:id/campaigns/:cid` | Bearer | Delete a draft campaign |
 | `POST` | `/api/v1/restaurants/:id/campaigns/:cid/send` | Bearer | Dispatch campaign (email; SMS is 501 stub) |
 | `WS` | `/api/v1/ws/chat/:restaurant_id?token=<jwt>` | JWT query param | AI chat widget — real-time restaurant Q&A |
+| `POST` | `/api/v1/billing/webhook` | Stripe-Signature header | Process Stripe subscription events (HMAC-SHA256 verified) |
+| `GET` | `/api/v1/admin/tenants/:id/plan` | X-Admin-Key header | Get tenant plan tier + monthly AI token usage |
+| `PATCH` | `/api/v1/admin/tenants/:id/plan` | X-Admin-Key header | Override tenant plan tier |
 
 ### Cursor-based pagination
 
@@ -389,9 +392,7 @@ The review list endpoint supports additional query parameters:
 
 ### Planned (see `documentation/architecture.md` for the full surface)
 
-```
-POST   /api/v1/billing/webhook            ← Phase 8 — Stripe subscription billing
-```
+See Phase 9 in [`documentation/architecture.md`](documentation/architecture.md) for the upcoming hardening and observability work.
 
 ---
 
@@ -497,8 +498,8 @@ sqlx migrate info    # show status
 | **5** | AI marketing content generation (SSE streaming) | ✅ Complete |
 | **6** | Business intelligence & analytics dashboards | ✅ Complete |
 | **7** | Customer engagement — campaigns & AI chat widget | ✅ Complete |
-| **8** | Stripe billing & subscription tier gating | 🔲 Next |
-| **9** | Hardening — OpenTelemetry, RLS, load testing, OpenAPI spec | 🔲 Planned |
+| **8** | Stripe billing & subscription tier gating | ✅ Complete |
+| **9** | Hardening — OpenTelemetry, RLS, load testing, OpenAPI spec | 🔲 Next |
 
 Full details for each phase are in [`documentation/architecture.md`](documentation/architecture.md).
 
@@ -517,3 +518,4 @@ Full details for each phase are in [`documentation/architecture.md`](documentati
 | [`documentation/phase-5-content.md`](documentation/phase-5-content.md) | Phase 5 — content types, SSE streaming, status lifecycle, cursor pagination |
 | [`documentation/phase-6-analytics.md`](documentation/phase-6-analytics.md) | Phase 6 — real-time BI analytics, Redis caching, SQL aggregations |
 | [`documentation/phase-7-engagement.md`](documentation/phase-7-engagement.md) | Phase 7 — contact management, bulk email campaigns, AI chat WebSocket |
+| [`documentation/phase-8-billing.md`](documentation/phase-8-billing.md) | Phase 8 — Stripe webhook, plan tiers, AI budget enforcement, admin overrides |
