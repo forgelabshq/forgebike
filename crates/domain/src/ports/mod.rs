@@ -2,6 +2,7 @@
 
 pub mod ai_port;
 pub mod analytics_port;
+pub mod billing_port;
 pub mod campaign_repository;
 pub mod content_repository;
 pub mod customer_contact_repository;
