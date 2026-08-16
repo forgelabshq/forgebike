@@ -106,4 +106,65 @@ impl TenantRepository for PgTenantRepository {
 
         row.map(Tenant::try_from).transpose()
     }
+
+    async fn update_plan(
+        &self,
+        id: TenantId,
+        plan: PlanTier,
+        stripe_customer_id: Option<&str>,
+    ) -> Result<Tenant, DomainError> {
+        let row = sqlx::query_as::<_, TenantRow>(
+            r"
+            UPDATE tenants
+            SET plan_tier          = $2::plan_tier,
+                stripe_customer_id = COALESCE($3::TEXT, stripe_customer_id),
+                updated_at         = NOW()
+            WHERE id = $1
+            RETURNING id, name, plan_tier::TEXT AS plan_tier, stripe_customer_id, created_at, updated_at
+            ",
+        )
+        .bind(id.as_uuid())
+        .bind(plan.to_string())
+        .bind(stripe_customer_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+        let row = row.ok_or_else(|| DomainError::NotFound(format!("Tenant {id} not found")))?;
+        Tenant::try_from(row)
+    }
+
+    async fn find_by_stripe_customer_id(
+        &self,
+        stripe_customer_id: &str,
+    ) -> Result<Option<Tenant>, DomainError> {
+        let row = sqlx::query_as::<_, TenantRow>(
+            r"
+            SELECT id, name, plan_tier::TEXT AS plan_tier, stripe_customer_id, created_at, updated_at
+            FROM tenants
+            WHERE stripe_customer_id = $1
+            ",
+        )
+        .bind(stripe_customer_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+        row.map(Tenant::try_from).transpose()
+    }
+
+    async fn list_all(&self) -> Result<Vec<Tenant>, DomainError> {
+        let rows = sqlx::query_as::<_, TenantRow>(
+            r"
+            SELECT id, name, plan_tier::TEXT AS plan_tier, stripe_customer_id, created_at, updated_at
+            FROM tenants
+            ORDER BY created_at ASC
+            ",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Internal(e.to_string()))?;
+
+        rows.into_iter().map(Tenant::try_from).collect()
+    }
 }
